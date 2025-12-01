@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AppView, Language, LandingContent } from '../types';
 import { TRANSLATIONS } from '../constants';
 
@@ -12,17 +12,64 @@ interface LandingPageProps {
 
 const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, content }) => {
   const t = TRANSLATIONS[lang].landing;
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900">
+    <div className="min-h-screen bg-white font-sans text-gray-900 relative">
+      {/* Mobile Menu Overlay */}
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col animate-in fade-in duration-200">
+           <div className="px-6 py-6 flex justify-between items-center border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="bg-blue-600 text-white font-bold text-xl px-2 py-1 rounded">DRC</span>
+                <span className="text-xl font-bold text-blue-900">{content.appName || 'Loyalty'}</span>
+              </div>
+              <button onClick={() => setIsMenuOpen(false)} className="text-gray-500 hover:text-gray-900 p-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+           </div>
+           <div className="p-6 flex flex-col gap-6 text-lg">
+              <div className="flex gap-4">
+                 <button 
+                    onClick={() => { setLang('en'); setIsMenuOpen(false); }} 
+                    className={`flex-1 px-4 py-3 rounded-xl border text-center font-medium transition-colors ${lang === 'en' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-600'}`}
+                 >
+                    English
+                 </button>
+                 <button 
+                    onClick={() => { setLang('fr'); setIsMenuOpen(false); }} 
+                    className={`flex-1 px-4 py-3 rounded-xl border text-center font-medium transition-colors ${lang === 'fr' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-600'}`}
+                 >
+                    Français
+                 </button>
+              </div>
+              <hr className="border-gray-100" />
+              <button 
+                onClick={() => { onNavigate(AppView.ShopperLogin); setIsMenuOpen(false); }}
+                className="text-left font-bold text-gray-900 py-2 hover:text-blue-600"
+              >
+                {t.nav_shopper}
+              </button>
+              <button 
+                onClick={() => { onNavigate(AppView.Login); setIsMenuOpen(false); }}
+                className="text-left font-bold text-gray-900 py-2 hover:text-blue-600"
+              >
+                {t.nav_partner}
+              </button>
+           </div>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+      <nav className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center relative z-40">
         <div className="flex items-center gap-2">
            <span className="bg-blue-600 text-white font-bold text-xl px-2 py-1 rounded">DRC</span>
            <span className="text-xl font-bold text-blue-900">{content.appName || 'Loyalty'}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex bg-gray-100 rounded-lg p-1">
+        
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center gap-4">
+          <div className="flex bg-gray-100 rounded-lg p-1">
               <button 
                 onClick={() => setLang('en')}
                 className={`px-2 py-1 rounded text-xs font-medium transition-all ${lang === 'en' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
@@ -44,11 +91,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, co
           </button>
           <button 
             onClick={() => onNavigate(AppView.Login)}
-            className="hidden md:block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-medium transition-all shadow-md hover:shadow-lg text-sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-medium transition-all shadow-md hover:shadow-lg text-sm"
           >
             {t.nav_partner}
           </button>
         </div>
+
+        {/* Mobile Hamburger Trigger */}
+        <button onClick={() => setIsMenuOpen(true)} className="md:hidden text-gray-600 p-2 hover:text-blue-600 transition-colors">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
       </nav>
 
       {/* Hero Section */}

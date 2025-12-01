@@ -37,14 +37,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lang, onLogout,
       {/* Mobile Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden animate-in fade-in"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden animate-in fade-in"
           onClick={onClose}
         />
       )}
 
       <aside className={`
         fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 
-        flex flex-col z-30 transition-transform duration-300 ease-in-out
+        flex flex-col z-50 transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
       `}>
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
