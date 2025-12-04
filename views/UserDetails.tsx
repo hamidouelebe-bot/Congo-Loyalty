@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { MOCK_USERS, MOCK_RECEIPTS, TRANSLATIONS } from '../constants';
-import { Language, UserStatus, AppView } from '../types';
+import { Language, UserStatus, AppView, UserSegment } from '../types';
 
 interface UserDetailsProps {
   userId: string | null;
@@ -25,6 +25,12 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, lang, onNavigate }) =
 
   const handleUnban = () => {
     setUser({ ...user, status: UserStatus.Active });
+  };
+
+  const handleSegmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSegment = e.target.value as UserSegment;
+    // In a real app, this would make an API call to override the auto-calculation
+    setUser({ ...user, segment: newSegment });
   };
 
   const calculateAge = (birthdate?: string) => {
@@ -52,7 +58,10 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, lang, onNavigate }) =
               {user.firstName[0]}{user.lastName[0]}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{user.firstName} {user.lastName}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                 {user.firstName} {user.lastName}
+                 {user.segment === 'VIP' && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full border border-yellow-200">VIP</span>}
+              </h1>
               <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                 <span>{user.email}</span>
                 <span>•</span>
@@ -107,6 +116,37 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, lang, onNavigate }) =
              <div className="text-sm text-gray-500 uppercase tracking-wide font-medium">Total Spent</div>
              <div className="mt-1 text-2xl font-bold text-gray-900">{user.totalSpent.toLocaleString()} CDF</div>
           </div>
+        </div>
+
+        {/* Classification Control */}
+        <div className="px-8 py-6 border-b border-gray-100 bg-white">
+           <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-sm text-gray-800 uppercase tracking-wide">Customer Classification</h3>
+              <div className="flex items-center gap-2">
+                 <span className="text-xs text-gray-500">Manual Override:</span>
+                 <select 
+                    value={user.segment || 'Regular'} 
+                    onChange={handleSegmentChange}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                 >
+                    <option value="Regular">Regular</option>
+                    <option value="VIP">VIP</option>
+                    <option value="New">New</option>
+                    <option value="ChurnRisk">Churn Risk</option>
+                 </select>
+              </div>
+           </div>
+           
+           <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+              <div className="flex gap-2 mb-2">
+                 <span className="font-bold text-blue-900 text-sm">Automated Logic:</span>
+              </div>
+              <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
+                 <li><strong>VIP:</strong> > 2,000 Points</li>
+                 <li><strong>New:</strong> Joined within 30 days</li>
+                 <li><strong>Churn Risk:</strong> 2+ Rejected receipts</li>
+              </ul>
+           </div>
         </div>
 
         {/* Demographics Section */}

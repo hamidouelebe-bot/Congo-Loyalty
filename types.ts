@@ -11,6 +11,8 @@ export enum ReceiptStatus {
   Rejected = 'rejected'
 }
 
+export type UserSegment = 'VIP' | 'New' | 'ChurnRisk' | 'Regular';
+
 export interface User {
   id: string;
   firstName: string;
@@ -29,6 +31,8 @@ export interface User {
   gender?: 'Male' | 'Female' | 'Other';
   birthdate?: string; // YYYY-MM-DD
   pin?: string;
+  // Classification
+  segment?: UserSegment;
 }
 
 export interface Notification {
