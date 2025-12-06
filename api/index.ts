@@ -154,7 +154,7 @@ const initDb = async () => {
     // Users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         first_name VARCHAR(255),
         last_name VARCHAR(255),
         email VARCHAR(255),
@@ -191,7 +191,7 @@ const initDb = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS receipts (
         id VARCHAR(50) PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id UUID REFERENCES users(id),
         supermarket_name VARCHAR(255),
         amount DECIMAL,
         date TIMESTAMP DEFAULT NOW(),
@@ -246,7 +246,7 @@ const initDb = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS activities (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id UUID REFERENCES users(id),
         type VARCHAR(50),
         description VARCHAR(255),
         points INTEGER,
@@ -258,7 +258,7 @@ const initDb = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id UUID REFERENCES users(id),
         title VARCHAR(255),
         message TEXT,
         date TIMESTAMP DEFAULT NOW(),
