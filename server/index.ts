@@ -93,12 +93,7 @@ const initDb = async () => {
       END $$;
     `);
 
-    // Seed Admin
-    const res = await pool.query('SELECT * FROM admins WHERE email = $1', ['admin@drcloyalty.com']);
-    if (res.rows.length === 0) {
-      console.log('Seeding default admin...');
-      await pool.query('INSERT INTO admins (email, password, name) VALUES ($1, $2, $3)', ['admin@drcloyalty.com', 'admin123', 'Super Admin']);
-    }
+    // Note: No default admin seeding for security - admins must register through the signup flow
 
     // Seed Rewards if empty
     const rewardsRes = await pool.query('SELECT COUNT(*) FROM rewards');

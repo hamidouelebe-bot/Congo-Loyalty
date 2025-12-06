@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
 
 // Database connection
 const getDatabaseUrl = () => {
@@ -252,11 +253,7 @@ const initDb = async () => {
       );
     `);
 
-    // Seed Admin if not exists
-    const res = await pool.query('SELECT * FROM admins WHERE email = $1', ['admin@drcloyalty.com']);
-    if (res.rows.length === 0) {
-      await pool.query('INSERT INTO admins (email, password, name) VALUES ($1, $2, $3)', ['admin@drcloyalty.com', 'admin123', 'Super Admin']);
-    }
+    // Note: No default admin seeding for security - admins must register through the signup flow
 
     // Seed Rewards if empty
     const rewardsRes = await pool.query('SELECT COUNT(*) FROM rewards');
@@ -405,11 +402,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ============ AUTH ============
     if (path === '/auth/admin/login' && method === 'POST') {
       const { email, password } = req.body;
-      const result = await pool.query('SELECT * FROM admins WHERE email = $1 AND password = $2', [email, password]);
+      const result = await pool.query('SELECT * FROM admins WHERE email = $1', [email]);
       
       if (result.rows.length > 0) {
         const admin = result.rows[0];
-        return res.json({ success: true, user: { name: admin.name, email: admin.email, role: admin.role || 'admin' } });
+        // Check if password is hashed (starts with $2) or plain text (legacy)
+        const isValidPassword = admin.password.startsWith('$2') 
+          ? await bcrypt.compare(password, admin.password)
+          : admin.password === password;
+        
+        if (isValidPassword) {
+          return res.json({ success: true, user: { name: admin.name, email: admin.email, role: admin.role || 'admin' } });
+        }
       }
       return res.status(401).json({ success: false, error: 'Invalid Credentials' });
     }
@@ -427,11 +431,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           total_spent as "totalSpent", to_char(joined_date, 'YYYY-MM-DD') as "joinedDate",
           gender, to_char(birthdate, 'YYYY-MM-DD') as "birthdate",
           CASE WHEN total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
-        FROM users WHERE phone_number = $1 AND pin = $2
-      `, [cleanPhone, pin]);
+        FROM users WHERE phone_number = $1
+      `, [cleanPhone]);
 
       if (result.rows.length > 0) {
-        return res.json({ success: true, user: result.rows[0] });
+        const user = result.rows[0];
+        // Check if PIN is hashed or plain text (legacy)
+        const isValidPin = user.pin.startsWith('$2') 
+          ? await bcrypt.compare(pin, user.pin)
+          : user.pin === pin;
+        
+        if (isValidPin) {
+          // Don't return PIN in response
+          const { pin: _, ...userWithoutPin } = user;
+          return res.json({ success: true, user: userWithoutPin });
+        }
       }
       return res.status(401).json({ success: false, error: 'Invalid Credentials' });
     }
@@ -470,15 +484,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ success: false, error: 'Phone number already registered' });
       }
 
+      // Hash PIN before storing
+      const hashedPin = await bcrypt.hash(pin, 10);
+
       const result = await pool.query(`
         INSERT INTO users (first_name, last_name, email, phone_number, pin, gender, birthdate, status, points_balance, joined_date)
         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 50, NOW())
         RETURNING id, first_name as "firstName", last_name as "lastName", email,
-          phone_number as "phoneNumber", pin, status, points_balance as "pointsBalance",
+          phone_number as "phoneNumber", status, points_balance as "pointsBalance",
           0 as "pointsExpiring", NULL as "pointsExpiresAt", 0 as "totalSpent",
           to_char(joined_date, 'YYYY-MM-DD') as "joinedDate", gender,
           to_char(birthdate, 'YYYY-MM-DD') as "birthdate", 'New' as segment
-      `, [firstName, lastName, email, cleanPhone, pin, gender, birthdate]);
+      `, [firstName, lastName, email, cleanPhone, hashedPin, gender, birthdate]);
 
       sendWelcomeEmail(email, firstName).catch(console.error);
       return res.json({ success: true, user: result.rows[0] });
@@ -488,24 +505,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { email, password } = req.body;
       
       const result = await pool.query(`
-        SELECT p.id, p.name, p.email, p.company_name as "companyName", p.phone, p.status,
+        SELECT p.id, p.name, p.email, p.password, p.company_name as "companyName", p.phone, p.status,
           to_char(p.created_at, 'YYYY-MM-DD') as "createdAt",
           COALESCE(array_agg(ps.supermarket_id) FILTER (WHERE ps.supermarket_id IS NOT NULL), '{}') as "supermarketIds"
         FROM partners p
         LEFT JOIN partner_supermarkets ps ON p.id = ps.partner_id
-        WHERE p.email = $1 AND p.password = $2
+        WHERE p.email = $1
         GROUP BY p.id
-      `, [email, password]);
+      `, [email]);
 
       if (result.rows.length > 0) {
         const partner = result.rows[0];
-        if (partner.status === 'suspended') {
-          return res.status(403).json({ success: false, error: 'Account suspended. Contact support.' });
+        // Check if password is hashed or plain text (legacy)
+        const isValidPassword = partner.password.startsWith('$2') 
+          ? await bcrypt.compare(password, partner.password)
+          : partner.password === password;
+        
+        if (isValidPassword) {
+          if (partner.status === 'suspended') {
+            return res.status(403).json({ success: false, error: 'Account suspended. Contact support.' });
+          }
+          if (partner.status === 'pending') {
+            return res.status(403).json({ success: false, error: 'Account pending approval.' });
+          }
+          const { password: _, ...partnerWithoutPassword } = partner;
+          return res.json({ success: true, user: { ...partnerWithoutPassword, role: 'partner' } });
         }
-        if (partner.status === 'pending') {
-          return res.status(403).json({ success: false, error: 'Account pending approval.' });
-        }
-        return res.json({ success: true, user: { ...partner, role: 'partner' } });
       }
       return res.status(401).json({ success: false, error: 'Invalid Credentials' });
     }
@@ -530,11 +555,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ success: false, error: 'Email already registered' });
       }
 
+      // Hash password before storing
+      const hashedPassword = await bcrypt.hash(password, 10);
+
       const result = await pool.query(`
         INSERT INTO partners (name, email, password, company_name, phone, status)
         VALUES ($1, $2, $3, $4, $5, 'pending')
         RETURNING id, name, email, company_name as "companyName", phone, status, to_char(created_at, 'YYYY-MM-DD') as "createdAt"
-      `, [name, email, password, companyName, phone]);
+      `, [name, email, hashedPassword, companyName, phone]);
 
       sendWelcomeEmail(email, name).catch(console.error);
       return res.json({ success: true, user: { ...result.rows[0], role: 'partner', supermarketIds: [] }, message: 'Account created! Pending admin approval.' });
@@ -563,11 +591,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const countRes = await pool.query('SELECT COUNT(*) FROM admins');
       const role = parseInt(countRes.rows[0].count) === 0 ? 'super_admin' : 'admin';
 
+      // Hash password before storing
+      const hashedPassword = await bcrypt.hash(password, 10);
+
       const result = await pool.query(`
         INSERT INTO admins (name, email, password, role)
         VALUES ($1, $2, $3, $4)
         RETURNING id, name, email, role
-      `, [name, email, password, role]);
+      `, [name, email, hashedPassword, role]);
 
       sendWelcomeEmail(email, name).catch(console.error);
       return res.json({ success: true, user: result.rows[0] });
@@ -577,7 +608,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (path === '/users' && method === 'GET') {
       const result = await pool.query(`
         SELECT id, first_name as "firstName", last_name as "lastName", email,
-          phone_number as "phoneNumber", pin, status, points_balance as "pointsBalance",
+          phone_number as "phoneNumber", status, points_balance as "pointsBalance",
           points_expiring as "pointsExpiring", to_char(points_expires_at, 'YYYY-MM-DD') as "pointsExpiresAt",
           total_spent as "totalSpent", to_char(joined_date, 'YYYY-MM-DD') as "joinedDate",
           gender, to_char(birthdate, 'YYYY-MM-DD') as "birthdate",
@@ -591,7 +622,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = path.split('/')[2];
       const result = await pool.query(`
         SELECT id, first_name as "firstName", last_name as "lastName", email,
-          phone_number as "phoneNumber", pin, status, points_balance as "pointsBalance",
+          phone_number as "phoneNumber", status, points_balance as "pointsBalance",
           points_expiring as "pointsExpiring", to_char(points_expires_at, 'YYYY-MM-DD') as "pointsExpiresAt",
           total_spent as "totalSpent", to_char(joined_date, 'YYYY-MM-DD') as "joinedDate",
           gender, to_char(birthdate, 'YYYY-MM-DD') as "birthdate",

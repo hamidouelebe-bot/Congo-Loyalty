@@ -49,11 +49,6 @@ const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, onNavigate, lang }
         <div className="p-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {!isLoading && (
-               <div className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded mb-2 text-center">
-                 Demo Mode Active. Use: <strong>81 123 4567</strong> / <strong>1234</strong>
-               </div>
-            )}
 
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t.phone_label}</label>
@@ -67,7 +62,7 @@ const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, onNavigate, lang }
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full px-4 py-3 rounded-r-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                  placeholder="81 123 4567"
+                  placeholder="XX XXX XXXX"
                 />
               </div>
             </div>
