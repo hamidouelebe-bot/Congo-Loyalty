@@ -8,6 +8,7 @@ interface ShopperRewardsProps {
   onNavigate: (view: AppView) => void;
   lang: Language;
   user: User;
+  onUpdateUser?: (user: User) => void;
 }
 
 interface Reward {
@@ -19,7 +20,7 @@ interface Reward {
   brand: string;
 }
 
-const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user }) => {
+const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user, onUpdateUser }) => {
   const [userPoints, setUserPoints] = useState(user.pointsBalance);
   const [filter, setFilter] = useState<'all' | 'voucher' | 'airtime' | 'product'>('all');
   const [rewards, setRewards] = useState<Reward[]>([]);
@@ -48,6 +49,9 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user 
           const result = await api.rewards.redeem(user.id, reward.id);
           if (result.success) {
             setUserPoints(result.newBalance);
+            if (onUpdateUser) {
+              onUpdateUser({ ...user, pointsBalance: result.newBalance });
+            }
             alert('Récompense échangée ! Vérifiez vos SMS.');
           }
         } catch (error: any) {

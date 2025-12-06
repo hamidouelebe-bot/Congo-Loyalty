@@ -216,6 +216,11 @@ const App: React.FC = () => {
     localStorage.setItem('shopperUser', JSON.stringify(updatedUser));
   };
 
+  const updateShopperUser = (user: User) => {
+    setShopperUser(user);
+    localStorage.setItem('shopperUser', JSON.stringify(user));
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUserRole(null);
@@ -272,7 +277,7 @@ const App: React.FC = () => {
     switch (currentView) {
       case AppView.ShopperDashboard: return <ShopperDashboard user={shopperUser} notifications={notifications} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
       case AppView.ShopperScan: return <ShopperScan onNavigate={setCurrentView} lang={lang} />;
-      case AppView.ShopperRewards: return <ShopperRewards user={shopperUser} onNavigate={setCurrentView} lang={lang} />;
+      case AppView.ShopperRewards: return <ShopperRewards user={shopperUser} onNavigate={setCurrentView} lang={lang} onUpdateUser={updateShopperUser} />;
       case AppView.ShopperActivity: return <ShopperActivity onNavigate={setCurrentView} lang={lang} />;
       case AppView.ShopperProfile: return <ShopperProfile user={shopperUser} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
       case AppView.ShopperNotifications: return <ShopperNotifications notifications={notifications} onNavigate={setCurrentView} lang={lang} />;
