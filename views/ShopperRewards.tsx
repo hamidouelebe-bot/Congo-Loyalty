@@ -27,6 +27,10 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user,
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    setUserPoints(user.pointsBalance);
+  }, [user.pointsBalance]);
+
+  useEffect(() => {
     const fetchRewards = async () => {
       try {
         const data = await api.rewards.getAll();
