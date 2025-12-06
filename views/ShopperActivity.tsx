@@ -33,16 +33,8 @@ const ShopperActivity: React.FC<ShopperActivityProps> = ({ onNavigate, lang }) =
         
         try {
             const user = JSON.parse(storedUser);
-            const receipts = await api.receipts.getByUserId(user.id);
-            
-            // Mock some point history mixed with receipts (since backend doesn't have a 'transactions' table yet)
-            const mixedActivities = [
-                ...receipts.map((r: Receipt) => ({ ...r, type: 'receipt' })),
-                // Example transaction (we could add a table for this later)
-                // { id: 'TX-99', type: 'redemption', date: '2024-05-18', desc: 'Échange Crédit', amount: -500, status: 'completed' }
-            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            
-            setActivities(mixedActivities);
+            const data = await api.activities.getAll(user.id);
+            setActivities(data);
         } catch (error) {
             console.error("Failed to fetch activity:", error);
         } finally {
@@ -70,39 +62,24 @@ const ShopperActivity: React.FC<ShopperActivityProps> = ({ onNavigate, lang }) =
             activities.map((item: any) => (
           <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4">
              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0 ${
-               item.type === 'receipt' ? 'bg-blue-50' : 'bg-orange-50'
+               item.type === 'earn' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
              }`}>
-               {item.type === 'receipt' ? '🧾' : '🎁'}
+               {item.type === 'earn' ? '💰' : '🎁'}
              </div>
              <div className="flex-1">
                <div className="flex justify-between items-start">
                  <div>
                    <h4 className="font-bold text-gray-900 text-sm">
-                     {item.type === 'receipt' ? item.supermarketName : item.desc}
+                     {item.description}
                    </h4>
                    <p className="text-xs text-gray-500">{item.date}</p>
                  </div>
                  <div className="text-right">
-                   {item.type === 'receipt' ? (
-                     <>
-                        <p className="font-bold text-gray-900 text-sm">{item.amount.toLocaleString()} FC</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          item.status === 'verified' ? 'bg-green-100 text-green-700' : 
-                          item.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {item.status === 'verified' ? 'validé' : item.status === 'pending' ? 'en attente' : 'rejeté'}
-                        </span>
-                     </>
-                   ) : (
-                     <p className="font-bold text-red-600 text-sm">{item.amount} Pts</p>
-                   )}
+                    <p className={`font-bold text-sm ${item.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.points > 0 ? '+' : ''}{item.points} Pts
+                    </p>
                  </div>
                </div>
-               {item.type === 'receipt' && item.status === 'verified' && (
-                 <div className="mt-2 text-xs text-green-600 font-medium bg-green-50 inline-block px-2 py-1 rounded">
-                   +50 Points Gagnés
-                 </div>
-               )}
              </div>
           </div>
         )))}

@@ -5,9 +5,21 @@ const API_PREFIX = '/api';
 export const api = {
   upload: {
     image: async (file: File): Promise<{ url: string }> => {
-      // Convert file to base64
-      const buffer = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+      // Convert file to base64 safely using FileReader
+      const toBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Remove data:image/xxx;base64, prefix
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = error => reject(error);
+        });
+      };
+
+      const base64 = await toBase64(file);
       
       const res = await fetch(`${API_PREFIX}/upload`, {
         method: 'POST',
@@ -126,6 +138,25 @@ export const api = {
         method: 'DELETE'
       });
       if (!res.ok) throw new Error('Failed to delete reward');
+    },
+    redeem: async (userId: string, rewardId: string): Promise<{ success: boolean; newBalance: number }> => {
+      const res = await fetch(`${API_PREFIX}/rewards/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, rewardId })
+      });
+      if (!res.ok) {
+         const error = await res.json();
+         throw new Error(error.error || 'Failed to redeem reward');
+      }
+      return res.json();
+    }
+  },
+  activities: {
+    getAll: async (userId: string): Promise<{ id: number; type: string; description: string; points: number; date: string }[]> => {
+        const res = await fetch(`${API_PREFIX}/activities/${userId}`);
+        if (!res.ok) throw new Error('Failed to fetch activities');
+        return res.json();
     }
   },
   users: {

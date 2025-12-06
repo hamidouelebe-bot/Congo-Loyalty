@@ -242,6 +242,18 @@ const initDb = async () => {
       );
     `);
 
+    // Activities table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activities (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        type VARCHAR(50),
+        description VARCHAR(255),
+        points INTEGER,
+        date TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     // Notifications table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
@@ -360,6 +372,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[REWARDS] Fetching all rewards...');
       const result = await pool.query('SELECT id, title, cost, type, brand, image_url as "imageUrl", partner_id as "partnerId" FROM rewards');
       console.log('[REWARDS] Found:', result.rows.length, 'rewards');
+      return res.json(result.rows);
+    }
+
+    if (path === '/rewards/redeem' && method === 'POST') {
+      const { userId, rewardId } = req.body;
+      
+      try {
+        // Get User Points
+        const userRes = await pool.query('SELECT points_balance FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        const userPoints = userRes.rows[0].points_balance;
+
+        // Get Reward Cost
+        const rewardRes = await pool.query('SELECT * FROM rewards WHERE id = $1', [rewardId]);
+        if (rewardRes.rows.length === 0) return res.status(404).json({ error: 'Reward not found' });
+        const reward = rewardRes.rows[0];
+
+        if (userPoints < reward.cost) {
+          return res.status(400).json({ error: 'Insufficient points' });
+        }
+
+        // Deduct Points
+        await pool.query('UPDATE users SET points_balance = points_balance - $1 WHERE id = $2', [reward.cost, userId]);
+
+        // Record Activity
+        await pool.query(`
+          INSERT INTO activities (user_id, type, description, points, date)
+          VALUES ($1, 'redeem', $2, $3, NOW())
+        `, [userId, `Redeemed ${reward.title}`, -reward.cost]);
+
+        // Create Notification
+        await pool.query(`
+          INSERT INTO notifications (user_id, title, message, type, date)
+          VALUES ($1, 'Reward Redeemed', $2, 'reward', NOW())
+        `, [userId, `You successfully redeemed ${reward.title} for ${reward.cost} points.`]);
+
+        const newBalance = userPoints - reward.cost;
+        return res.json({ success: true, newBalance });
+      } catch (error: any) {
+        console.error('Redemption Error:', error);
+        return res.status(500).json({ error: 'Redemption failed' });
+      }
+    }
+
+    // ============ ACTIVITIES ============
+    if (path.match(/^\/activities\/\d+$/) && method === 'GET') {
+      const userId = path.split('/')[2];
+      const result = await pool.query('SELECT id, type, description, points, to_char(date, \'YYYY-MM-DD HH24:MI\') as date FROM activities WHERE user_id = $1 ORDER BY date DESC', [userId]);
       return res.json(result.rows);
     }
 
@@ -992,6 +1052,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             INSERT INTO notifications (user_id, title, message, type, date, read)
             VALUES ($1, 'Receipt Approved', $2, 'success', NOW(), false)
           `, [userId, `Your receipt has been approved! You earned ${points} points.`]);
+
+          // Record Activity
+          await client.query(`
+            INSERT INTO activities (user_id, type, description, points, date)
+            VALUES ($1, 'earn', 'Points earned from receipt', $2, NOW())
+          `, [userId, points]);
         }
         
         // If rejected, notify user

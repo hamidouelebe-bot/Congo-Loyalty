@@ -41,12 +41,19 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user 
 
   const filteredRewards = filter === 'all' ? rewards : rewards.filter(r => r.type === filter);
 
-  const handleRedeem = (reward: Reward) => {
+  const handleRedeem = async (reward: Reward) => {
     if (userPoints >= reward.cost) {
       if(confirm(`Échanger ${reward.title} pour ${reward.cost} points ?`)) {
-        // In a real app, call API to redeem
-        setUserPoints(prev => prev - reward.cost);
-        alert('Récompense échangée ! Vérifiez vos SMS.');
+        try {
+          const result = await api.rewards.redeem(user.id, reward.id);
+          if (result.success) {
+            setUserPoints(result.newBalance);
+            alert('Récompense échangée ! Vérifiez vos SMS.');
+          }
+        } catch (error: any) {
+          console.error("Redemption failed:", error);
+          alert(error.message || 'Échec de l\'échange. Veuillez réessayer.');
+        }
       }
     } else {
       alert('Points insuffisants !');
