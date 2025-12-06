@@ -267,6 +267,20 @@ const initDb = async () => {
       );
     `);
 
+    // Purchases (Redemptions) table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS purchases (
+        id SERIAL PRIMARY KEY,
+        user_id UUID REFERENCES users(id),
+        reward_id INTEGER REFERENCES rewards(id),
+        item_name VARCHAR(255),
+        cost INTEGER,
+        status VARCHAR(50) DEFAULT 'completed',
+        date TIMESTAMP DEFAULT NOW(),
+        fulfillment_details JSONB
+      );
+    `);
+
     // Note: No default admin seeding for security - admins must register through the signup flow
 
     // Seed Rewards if empty
@@ -401,6 +415,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           INSERT INTO activities (user_id, type, description, points, date)
           VALUES ($1, 'redeem', $2, $3, NOW())
         `, [userId, `Redeemed ${reward.title}`, -reward.cost]);
+
+        // Record Purchase
+        await pool.query(`
+          INSERT INTO purchases (user_id, reward_id, item_name, cost, status, date)
+          VALUES ($1, $2, $3, $4, 'completed', NOW())
+        `, [userId, reward.id, reward.title, reward.cost]);
 
         // Create Notification
         await pool.query(`
