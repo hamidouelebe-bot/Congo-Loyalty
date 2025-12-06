@@ -25,10 +25,26 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user,
   const [filter, setFilter] = useState<'all' | 'voucher' | 'airtime' | 'product'>('all');
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     setUserPoints(user.pointsBalance);
   }, [user.pointsBalance]);
+
+  const refreshBalance = async () => {
+    try {
+      setIsRefreshing(true);
+      const updatedUser = await api.users.getById(user.id);
+      setUserPoints(updatedUser.pointsBalance);
+      if (onUpdateUser) {
+        onUpdateUser(updatedUser);
+      }
+    } catch (error) {
+      console.error("Failed to refresh balance:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const fetchRewards = async () => {
@@ -75,7 +91,19 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user,
         <h1 className="text-xl font-bold text-gray-900">Boutique Cadeaux</h1>
         <div className="flex justify-between items-center mt-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
            <span className="text-sm text-blue-800 font-medium">Votre Solde</span>
-           <span className="text-lg font-bold text-blue-600">{userPoints.toLocaleString()} Pts</span>
+           <div className="flex items-center gap-2">
+             <span className="text-lg font-bold text-blue-600">{userPoints.toLocaleString()} Pts</span>
+             <button 
+               onClick={refreshBalance} 
+               disabled={isRefreshing}
+               className={`p-1.5 rounded-full hover:bg-blue-100 text-blue-600 transition-all ${isRefreshing ? 'animate-spin opacity-50' : ''}`}
+               title="Actualiser le solde"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+               </svg>
+             </button>
+           </div>
         </div>
         
         {/* Filters */}
