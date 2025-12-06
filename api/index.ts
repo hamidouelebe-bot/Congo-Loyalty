@@ -3,8 +3,16 @@ import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
 
 // Database connection
+const getDatabaseUrl = () => {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.error('DATABASE_URL environment variable is not set!');
+  }
+  return url;
+};
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: getDatabaseUrl(),
   ssl: {
     rejectUnauthorized: false
   }
@@ -293,9 +301,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await initDb();
 
   const { url, method } = req;
-  const path = url?.replace(/^\/api/, '') || '/';
+  // Extract path without query string and remove /api prefix
+  const fullPath = url?.split('?')[0] || '/';
+  const path = fullPath.replace(/^\/api\/index/, '').replace(/^\/api/, '') || '/';
+  
+  console.log(`[API] ${method} ${path} (original: ${url})`);
 
   try {
+    // ============ HEALTH CHECK ============
+    if ((path === '/' || path === '') && method === 'GET') {
+      return res.json({ status: 'ok', message: 'DRC Loyalty API is running', timestamp: new Date().toISOString() });
+    }
+
     // ============ REWARDS ============
     if (path === '/rewards' && method === 'GET') {
       const result = await pool.query('SELECT id, title, cost, type, brand, image_url as "imageUrl", partner_id as "partnerId" FROM rewards');
