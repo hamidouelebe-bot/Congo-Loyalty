@@ -33,10 +33,20 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang }) => {
     setError(null);
     setIsCameraActive(true);
     try {
-      // Request back camera
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' } 
-      });
+      let stream: MediaStream;
+      try {
+        // First try requesting the rear camera (best for receipts)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } } 
+        });
+      } catch (e) {
+        // Fallback to any available camera (laptops/webcams)
+        console.log("Environment camera request failed, trying default...", e);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+      }
+      
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
