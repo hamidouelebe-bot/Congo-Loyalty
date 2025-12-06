@@ -119,11 +119,13 @@ initDb();
 // Rewards Routes
 app.get('/api/rewards', async (req, res) => {
   try {
+    console.log('[REWARDS] Fetching all rewards...');
     const result = await pool.query('SELECT id, title, cost, type, brand, image_url as "imageUrl", partner_id as "partnerId" FROM rewards');
+    console.log('[REWARDS] Found:', result.rows.length, 'rewards');
     res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (err: any) {
+    console.error('[REWARDS] Error:', err.message, err.stack);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 

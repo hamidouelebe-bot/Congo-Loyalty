@@ -297,12 +297,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Initialize DB
   await initDb();
 
-  const { url, method } = req;
-  // Extract path without query string and remove /api prefix
-  const fullPath = url?.split('?')[0] || '/';
-  const path = fullPath.replace(/^\/api\/index/, '').replace(/^\/api/, '') || '/';
+  const { url, method, query } = req;
   
-  console.log(`[API] ${method} ${path} (original: ${url})`);
+  // Get path from query parameter (set by Vercel rewrite) or extract from URL
+  let path = '/';
+  if (query?.path) {
+    // Path comes from Vercel rewrite query parameter
+    path = '/' + (Array.isArray(query.path) ? query.path.join('/') : query.path);
+  } else if (url) {
+    // Fallback: extract from URL
+    const fullPath = url.split('?')[0] || '/';
+    path = fullPath.replace(/^\/api\/index/, '').replace(/^\/api/, '') || '/';
+  }
+  
+  console.log(`[API] ${method} ${path} (original: ${url}, query.path: ${query?.path})`);
 
   try {
     // ============ HEALTH CHECK ============
@@ -312,16 +320,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ============ REWARDS ============
     if (path === '/rewards' && method === 'GET') {
+      console.log('[REWARDS] Fetching all rewards...');
       const result = await pool.query('SELECT id, title, cost, type, brand, image_url as "imageUrl", partner_id as "partnerId" FROM rewards');
+      console.log('[REWARDS] Found:', result.rows.length, 'rewards');
       return res.json(result.rows);
     }
 
     if (path === '/rewards' && method === 'POST') {
+      console.log('[REWARDS] Creating reward with body:', JSON.stringify(req.body));
       const { title, cost, type, brand, imageUrl, partnerId } = req.body;
+      
+      if (!title || cost === undefined || !type) {
+        console.log('[REWARDS] Missing required fields');
+        return res.status(400).json({ error: 'Title, cost, and type are required' });
+      }
+      
       const result = await pool.query(
         'INSERT INTO rewards (title, cost, type, brand, image_url, partner_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title, cost, type, brand, image_url as "imageUrl", partner_id as "partnerId"',
-        [title, cost, type, brand, imageUrl, partnerId || null]
+        [title, cost, type, brand || '', imageUrl || '', partnerId || null]
       );
+      console.log('[REWARDS] Created reward:', result.rows[0]);
       return res.status(201).json(result.rows[0]);
     }
 
