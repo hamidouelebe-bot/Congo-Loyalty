@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { TRANSLATIONS, MOCK_SUPERMARKETS, MOCK_CAMPAIGNS } from '../constants';
+import { TRANSLATIONS } from '../constants';
 import { Language } from '../types';
 import { IconBrain } from '../components/Icons';
-import { analyzeDataWithGemini } from '../services/geminiService';
+import { api } from '../services/api';
 
 interface AIAnalysisProps {
   lang: Language;
@@ -20,20 +20,17 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ lang }) => {
     setLoading(true);
     setResponse(null);
 
-    // Prepare context data for the AI
-    const contextData = {
-      supermarkets: MOCK_SUPERMARKETS,
-      campaigns: MOCK_CAMPAIGNS,
-      summary: {
-        totalUsers: 12450,
-        totalSalesCDF: 482000000,
-        activeCampaigns: 1
-      }
-    };
-
-    const result = await analyzeDataWithGemini(prompt, contextData);
-    setResponse(result);
-    setLoading(false);
+    try {
+      const data = await api.ai.analyze(prompt);
+      setResponse(data.result);
+    } catch (error) {
+      console.error('AI Analysis failed:', error);
+      setResponse(lang === 'fr' 
+        ? "Désolé, je n'ai pas pu analyser les données pour le moment. Veuillez réessayer." 
+        : "Sorry, I couldn't analyze the data at this moment. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,7 +43,7 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ lang }) => {
             <h2 className="text-2xl font-bold">{t.ask_ai}</h2>
           </div>
           <p className="text-purple-100 max-w-2xl">
-            Leverage Google's Gemini 2.5 Flash model to uncover deep insights about partner performance, campaign ROI, and user behavior trends in real-time.
+            Leverage Google's Gemini 2.0 Flash model to uncover deep insights about partner performance, campaign ROI, and user behavior trends in real-time.
           </p>
        </div>
 

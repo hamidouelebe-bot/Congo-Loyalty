@@ -194,6 +194,20 @@ export const api = {
       const res = await fetch(`${API_PREFIX}/receipts/user/${userId}`);
       if (!res.ok) throw new Error('Failed to fetch user receipts');
       return res.json();
+    },
+    updateStatus: async (id: string, status: string, points?: number): Promise<void> => {
+      const res = await fetch(`${API_PREFIX}/receipts/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, points })
+      });
+      if (!res.ok) throw new Error('Failed to update receipt status');
+    },
+    delete: async (id: string): Promise<void> => {
+      const res = await fetch(`${API_PREFIX}/receipts/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete receipt');
     }
   },
   supermarkets: {
@@ -233,6 +247,30 @@ export const api = {
       if (!res.ok) throw new Error('Failed to fetch campaigns');
       return res.json();
     },
+    create: async (data: Partial<Campaign>): Promise<Campaign> => {
+      const res = await fetch(`${API_PREFIX}/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to create campaign');
+      return res.json();
+    },
+    update: async (id: string, data: Partial<Campaign>): Promise<Campaign> => {
+      const res = await fetch(`${API_PREFIX}/campaigns/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to update campaign');
+      return res.json();
+    },
+    delete: async (id: string): Promise<void> => {
+      const res = await fetch(`${API_PREFIX}/campaigns/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete campaign');
+    },
     updateStatus: async (id: string, status: string): Promise<void> => {
       const res = await fetch(`${API_PREFIX}/campaigns/${id}/status`, {
         method: 'PATCH',
@@ -243,6 +281,15 @@ export const api = {
     }
   },
   notifications: {
+    create: async (data: { userId?: string; title: string; message: string; type?: string }): Promise<Notification> => {
+      const res = await fetch(`${API_PREFIX}/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to create notification');
+      return res.json();
+    },
     getByUserId: async (userId: string): Promise<Notification[]> => {
       const res = await fetch(`${API_PREFIX}/notifications/${userId}`);
       if (!res.ok) throw new Error('Failed to fetch notifications');
@@ -276,6 +323,17 @@ export const api = {
     getAll: async (): Promise<Admin[]> => {
       const res = await fetch(`${API_PREFIX}/admins`);
       if (!res.ok) throw new Error('Failed to fetch admins');
+      return res.json();
+    }
+  },
+  ai: {
+    analyze: async (prompt: string): Promise<{ result: string }> => {
+      const res = await fetch(`${API_PREFIX}/ai/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      if (!res.ok) throw new Error('Failed to generate AI analysis');
       return res.json();
     }
   }

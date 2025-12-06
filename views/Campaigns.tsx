@@ -2,13 +2,43 @@
 import React, { useState, useEffect } from 'react';
 import { TRANSLATIONS } from '../constants';
 import { Language, Campaign, AppView, Supermarket } from '../types';
-import Modal from '../components/Modal';
 import { api } from '../services/api';
+import Modal from '../components/Modal';
 
 interface CampaignsProps {
   lang: Language;
   onNavigate: (view: AppView, id?: string) => void;
 }
+
+// Toast Component
+const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg animate-in slide-in-from-right duration-300 ${
+      type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`}>
+      {type === 'success' ? (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )}
+      <span className="font-medium">{message}</span>
+      <button onClick={onClose} className="ml-2 hover:opacity-80">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+};
 
 const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
   const t = TRANSLATIONS[lang];
@@ -17,24 +47,33 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [campaignsData, supermarketsData] = await Promise.all([
-          api.campaigns.getAll(),
-          api.supermarkets.getAll()
-        ]);
-        setCampaigns(campaignsData);
-        setSupermarkets(supermarketsData);
-      } catch (error) {
-        console.error("Failed to fetch campaigns data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [campaignsData, supermarketsData] = await Promise.all([
+        api.campaigns.getAll(),
+        api.supermarkets.getAll()
+      ]);
+      setCampaigns(campaignsData);
+      setSupermarkets(supermarketsData);
+    } catch (error) {
+      console.error("Failed to fetch campaigns data:", error);
+      showToast(lang === 'fr' ? 'Erreur lors du chargement des données' : 'Failed to load data', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+  };
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -99,7 +138,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const updatedData = {
         ...formData,
@@ -107,18 +146,24 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
         maxRedemptions: formData.maxRedemptions ? Number(formData.maxRedemptions) : undefined
     };
 
-    if (editingCampaign) {
-      setCampaigns(campaigns.map(c => c.id === editingCampaign.id ? { ...c, ...updatedData } : c));
-    } else {
-      const newCamp: Campaign = {
-        id: (campaigns.length + 1).toString(),
-        status: 'draft',
-        conversions: 0,
-        ...updatedData
-      } as Campaign;
-      setCampaigns([...campaigns, newCamp]);
+    try {
+      setIsSubmitting(true);
+      if (editingCampaign) {
+        const updated = await api.campaigns.update(editingCampaign.id, updatedData);
+        setCampaigns(campaigns.map(c => c.id === editingCampaign.id ? updated : c));
+        showToast(lang === 'fr' ? 'Campagne mise à jour' : 'Campaign updated', 'success');
+      } else {
+        const newCamp = await api.campaigns.create(updatedData);
+        setCampaigns([newCamp, ...campaigns]);
+        showToast(lang === 'fr' ? 'Campagne créée' : 'Campaign created', 'success');
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Failed to save campaign:', error);
+      showToast(lang === 'fr' ? 'Échec de l\'enregistrement' : 'Failed to save campaign', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsModalOpen(false);
   };
 
   const toggleSupermarket = (id: string) => {
@@ -130,13 +175,20 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm(lang === 'fr' ? 'Êtes-vous sûr de vouloir supprimer cette campagne ?' : 'Are you sure you want to delete this campaign?')) {
-      setCampaigns(campaigns.filter(c => c.id !== id));
+      try {
+        await api.campaigns.delete(id);
+        setCampaigns(campaigns.filter(c => c.id !== id));
+        showToast(lang === 'fr' ? 'Campagne supprimée' : 'Campaign deleted', 'success');
+      } catch (error) {
+        console.error('Failed to delete campaign:', error);
+        showToast(lang === 'fr' ? 'Échec de la suppression' : 'Failed to delete campaign', 'error');
+      }
     }
   };
 
-  const toggleStatus = (id: string, currentStatus: string) => {
+  const toggleStatus = async (id: string, currentStatus: string) => {
     let newStatus: 'active' | 'draft' | 'ended';
     let message = '';
 
@@ -149,7 +201,14 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
     }
 
     if (window.confirm(message)) {
-        setCampaigns(campaigns.map(c => c.id === id ? { ...c, status: newStatus } : c));
+        try {
+          await api.campaigns.updateStatus(id, newStatus);
+          setCampaigns(campaigns.map(c => c.id === id ? { ...c, status: newStatus } : c));
+          showToast(lang === 'fr' ? 'Statut mis à jour' : 'Status updated', 'success');
+        } catch (error) {
+          console.error('Failed to update status:', error);
+          showToast(lang === 'fr' ? 'Échec de la mise à jour du statut' : 'Failed to update status', 'error');
+        }
     }
   };
 
@@ -163,17 +222,34 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
      }
   };
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">{t.campaigns}</h2>
-        <button 
-          onClick={openCreateModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-        >
-          + {t.create_new}
-        </button>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
+    );
+  }
+
+  return (
+    <>
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
+      
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-800">{t.campaigns}</h2>
+          <button 
+            onClick={openCreateModal}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+          >
+            + {t.create_new}
+          </button>
+        </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {campaigns.map((campaign) => (
@@ -441,6 +517,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
         </form>
       </Modal>
     </div>
+    </>
   );
 };
 

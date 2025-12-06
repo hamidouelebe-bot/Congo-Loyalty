@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
 import { put } from '@vercel/blob';
+import { GoogleGenAI } from "@google/genai";
 
 // Database connection
 const getDatabaseUrl = () => {
@@ -846,8 +847,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           c.reward_type as "rewardType", c.reward_value as "rewardValue",
           COALESCE(array_agg(cs.supermarket_id) FILTER (WHERE cs.supermarket_id IS NOT NULL), '{}') as "supermarketIds"
         FROM campaigns c LEFT JOIN campaign_supermarkets cs ON c.id = cs.campaign_id GROUP BY c.id
+        ORDER BY c.id DESC
       `);
       return res.json(result.rows);
+    }
+
+    if (path === '/campaigns' && method === 'POST') {
+      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds } = req.body;
+      
+      const result = await pool.query(`
+        INSERT INTO campaigns (name, brand, status, start_date, end_date, mechanic, min_spend, max_redemptions, target_audience, reward_type, reward_value, conversions)
+        VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, 0)
+        RETURNING id, name, brand, status, to_char(start_date, 'YYYY-MM-DD') as "startDate",
+          to_char(end_date, 'YYYY-MM-DD') as "endDate", mechanic, min_spend as "minSpend",
+          max_redemptions as "maxRedemptions", conversions, target_audience as "targetAudience",
+          reward_type as "rewardType", reward_value as "rewardValue"
+      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue]);
+
+      const campaignId = result.rows[0].id;
+
+      if (supermarketIds && supermarketIds.length > 0) {
+        const values = supermarketIds.map((sid: string) => `(${campaignId}, '${sid}')`).join(',');
+        await pool.query(`INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) VALUES ${values}`);
+      }
+
+      return res.status(201).json({ ...result.rows[0], supermarketIds: supermarketIds || [] });
+    }
+
+    if (path.match(/^\/campaigns\/\d+$/) && method === 'PUT') {
+      const id = path.split('/')[2];
+      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds } = req.body;
+      
+      const result = await pool.query(`
+        UPDATE campaigns SET 
+          name = COALESCE($1, name), brand = COALESCE($2, brand), start_date = COALESCE($3, start_date),
+          end_date = COALESCE($4, end_date), mechanic = COALESCE($5, mechanic), min_spend = COALESCE($6, min_spend),
+          max_redemptions = COALESCE($7, max_redemptions), target_audience = COALESCE($8, target_audience),
+          reward_type = COALESCE($9, reward_type), reward_value = COALESCE($10, reward_value)
+        WHERE id = $11
+        RETURNING id, name, brand, status, to_char(start_date, 'YYYY-MM-DD') as "startDate",
+          to_char(end_date, 'YYYY-MM-DD') as "endDate", mechanic, min_spend as "minSpend",
+          max_redemptions as "maxRedemptions", conversions, target_audience as "targetAudience",
+          reward_type as "rewardType", reward_value as "rewardValue"
+      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, id]);
+
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+
+      if (supermarketIds) {
+        await pool.query('DELETE FROM campaign_supermarkets WHERE campaign_id = $1', [id]);
+        if (supermarketIds.length > 0) {
+          const values = supermarketIds.map((sid: string) => `(${id}, '${sid}')`).join(',');
+          await pool.query(`INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) VALUES ${values}`);
+        }
+      }
+
+      const updatedSupermarkets = await pool.query('SELECT supermarket_id FROM campaign_supermarkets WHERE campaign_id = $1', [id]);
+      const sids = updatedSupermarkets.rows.map(r => r.supermarket_id);
+
+      return res.json({ ...result.rows[0], supermarketIds: sids });
+    }
+
+    if (path.match(/^\/campaigns\/\d+$/) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      const result = await pool.query('DELETE FROM campaigns WHERE id = $1 RETURNING id', [id]);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+      return res.status(204).end();
     }
 
     if (path.match(/^\/campaigns\/\d+\/status$/) && method === 'PATCH') {
@@ -858,6 +922,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ============ NOTIFICATIONS ============
+    if (path === '/notifications' && method === 'POST') {
+      const { userId, title, message, type } = req.body;
+      if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
+      
+      const result = await pool.query(`
+        INSERT INTO notifications (user_id, title, message, type, date, read)
+        VALUES ($1, $2, $3, $4, NOW(), false)
+        RETURNING id, user_id as "userId", title, message, to_char(date, 'YYYY-MM-DD') as "date", read, type
+      `, [userId || null, title, message, type || 'info']);
+      
+      return res.status(201).json(result.rows[0]);
+    }
+
     if (path.match(/^\/notifications\/\d+$/) && method === 'GET') {
       const userId = path.split('/')[2];
       const result = await pool.query(`
@@ -865,6 +942,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM notifications WHERE user_id = $1 ORDER BY date DESC
       `, [userId]);
       return res.json(result.rows);
+    }
+    
+    // ============ RECEIPT ACTIONS ============
+    if (path.match(/^\/receipts\/[\w-]+\/status$/) && method === 'PUT') {
+      const id = path.split('/')[2];
+      const { status, points } = req.body;
+      
+      if (!['approved', 'rejected', 'pending'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        const updateRes = await client.query(
+          'UPDATE receipts SET status = $1 WHERE id = $2 RETURNING id, user_id', 
+          [status, id]
+        );
+        
+        if (updateRes.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Receipt not found' });
+        }
+
+        // If approved and points provided, award points
+        if (status === 'approved' && points && points > 0) {
+          const userId = updateRes.rows[0].user_id;
+          await client.query(
+            'UPDATE users SET points_balance = points_balance + $1 WHERE id = $2',
+            [points, userId]
+          );
+          
+          // Notify user
+          await client.query(`
+            INSERT INTO notifications (user_id, title, message, type, date, read)
+            VALUES ($1, 'Receipt Approved', $2, 'success', NOW(), false)
+          `, [userId, `Your receipt has been approved! You earned ${points} points.`]);
+        }
+        
+        // If rejected, notify user
+        if (status === 'rejected') {
+          const userId = updateRes.rows[0].user_id;
+          await client.query(`
+            INSERT INTO notifications (user_id, title, message, type, date, read)
+            VALUES ($1, 'Receipt Rejected', 'Your receipt could not be verified. Please try again.', 'error', NOW(), false)
+          `, [userId]);
+        }
+
+        await client.query('COMMIT');
+        return res.json({ success: true });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+    
+    if (path.match(/^\/receipts\/[\w-]+$/) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      // Cascading delete for receipt items handled by FK constraint if set, otherwise manual
+      await pool.query('DELETE FROM receipt_items WHERE receipt_id = $1', [id]);
+      const result = await pool.query('DELETE FROM receipts WHERE id = $1 RETURNING id', [id]);
+      
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Receipt not found' });
+      return res.status(204).end();
     }
 
     // ============ PARTNERS ============
@@ -907,6 +1051,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM admins ORDER BY created_at DESC
       `);
       return res.json(result.rows);
+    }
+
+    if (path === '/ai/analyze' && method === 'POST') {
+      const { prompt } = req.body;
+      if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+
+      // Gather Context from DB
+      const [usersStats, salesStats, campaigns, supermarkets, recentReceipts] = await Promise.all([
+        pool.query('SELECT COUNT(*) as total, SUM(CASE WHEN status = \'active\' THEN 1 ELSE 0 END) as active FROM users'),
+        pool.query('SELECT SUM(total_spent) as total_revenue, AVG(total_spent) as avg_spend FROM users'),
+        pool.query('SELECT name, brand, status, conversions FROM campaigns LIMIT 5'),
+        pool.query('SELECT name, avg_basket FROM supermarkets ORDER BY avg_basket DESC LIMIT 5'),
+        pool.query('SELECT supermarket_name, amount, date FROM receipts ORDER BY date DESC LIMIT 5')
+      ]);
+
+      const context = {
+        users: usersStats.rows[0],
+        sales: salesStats.rows[0],
+        activeCampaigns: campaigns.rows,
+        topSupermarkets: supermarkets.rows,
+        recentReceipts: recentReceipts.rows
+      };
+
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'AI Service not configured' });
+      }
+
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const model = 'gemini-2.0-flash'; // Using a standard model
+
+        const systemPrompt = `
+          You are an expert Data Analyst for DRC Loyalty.
+          Analyze the following real-time database context:
+          ${JSON.stringify(context, null, 2)}
+          
+          User Question: ${prompt}
+          
+          Provide professional, data-driven insights. 
+          If the data is 0 or empty, suggest actionable steps to improve (e.g., launch campaigns).
+          Keep it concise and format with Markdown.
+        `;
+
+        const response = await ai.models.generateContent({
+          model,
+          contents: systemPrompt,
+        });
+
+        return res.json({ result: response.text });
+      } catch (error: any) {
+        console.error('AI Error:', error);
+        return res.status(500).json({ error: 'Failed to generate insight', details: error.message });
+      }
     }
 
     // 404 for unmatched routes
