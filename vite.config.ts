@@ -15,6 +15,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Proxy only works in development - in production (Vercel), API is on same domain
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

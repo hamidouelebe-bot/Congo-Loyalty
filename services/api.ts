@@ -79,7 +79,7 @@ export const api = {
       if (!res.ok) throw new Error('Failed to fetch rewards');
       return res.json();
     },
-    create: async (data: { title: string; cost: number; type: string; brand: string; imageUrl: string; partnerId?: string }): Promise<any> => {
+    create: async (data: { title: string; cost: number; type: string; brand: string; imageUrl: string; partnerId?: number }): Promise<any> => {
       const res = await fetch(`${API_PREFIX}/rewards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,7 +88,7 @@ export const api = {
       if (!res.ok) throw new Error('Failed to create reward');
       return res.json();
     },
-    update: async (id: string, data: { title?: string; cost?: number; type?: string; brand?: string; imageUrl?: string; partnerId?: string }): Promise<any> => {
+    update: async (id: string, data: { title?: string; cost?: number; type?: string; brand?: string; imageUrl?: string; partnerId?: number }): Promise<any> => {
       const res = await fetch(`${API_PREFIX}/rewards/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

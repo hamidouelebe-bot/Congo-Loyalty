@@ -10,7 +10,8 @@ import CampaignAnalytics from './views/CampaignAnalytics';
 import Moderation from './views/Moderation';
 import AIAnalysis from './views/AIAnalysis';
 import AdminContent from './views/AdminContent';
-import DataExport from './views/DataExport'; 
+import DataExport from './views/DataExport';
+import AdminRewards from './views/AdminRewards';
 import LandingPage from './views/LandingPage';
 import Login from './views/Login';
 import AdminSignup from './views/AdminSignup';
@@ -296,7 +297,8 @@ const App: React.FC = () => {
         case AppView.CampaignAnalytics: return <CampaignAnalytics lang={lang} campaignId={selectedId} onNavigate={handleNavigate} />;
         case AppView.Moderation: return <Moderation lang={lang} />;
         case AppView.AIAnalysis: return <AIAnalysis lang={lang} />;
-        case AppView.DataExport: return <DataExport lang={lang} />; 
+        case AppView.DataExport: return <DataExport lang={lang} />;
+        case AppView.AdminRewards: return <AdminRewards lang={lang} />;
         case AppView.AdminContent: return <AdminContent content={appContent} onUpdateContent={setAppContent} lang={lang} />;
         default: return <Dashboard lang={lang} />;
       }
