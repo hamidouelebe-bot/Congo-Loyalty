@@ -417,7 +417,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ============ ACTIVITIES ============
-    if (path.match(/^\/activities\/\d+$/) && method === 'GET') {
+    if (path.match(/^\/activities\/[\w-]+$/) && method === 'GET') {
       const userId = path.split('/')[2];
       const result = await pool.query('SELECT id, type, description, points, to_char(date, \'YYYY-MM-DD HH24:MI\') as date FROM activities WHERE user_id = $1 ORDER BY date DESC', [userId]);
       return res.json(result.rows);
@@ -1007,7 +1007,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json(result.rows[0]);
     }
 
-    if (path.match(/^\/notifications\/\d+$/) && method === 'GET') {
+    if (path.match(/^\/notifications\/[\w-]+$/) && method === 'GET') {
       const userId = path.split('/')[2];
       const result = await pool.query(`
         SELECT id, user_id as "userId", title, message, to_char(date, 'YYYY-MM-DD') as "date", read, type
