@@ -666,7 +666,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(result.rows);
     }
 
-    if (path.match(/^\/users\/\d+$/) && method === 'GET') {
+    if (path.match(/^\/users\/[\w-]+$/) && method === 'GET') {
       const id = path.split('/')[2];
       const result = await pool.query(`
         SELECT id, first_name as "firstName", last_name as "lastName", email,
@@ -681,7 +681,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(result.rows[0]);
     }
 
-    if (path.match(/^\/users\/\d+\/status$/) && method === 'PUT') {
+    if (path.match(/^\/users\/[\w-]+\/status$/) && method === 'PUT') {
       const id = path.split('/')[2];
       const { status } = req.body;
       await pool.query('UPDATE users SET status = $1 WHERE id = $2', [status, id]);
@@ -689,7 +689,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Update user (full update)
-    if (path.match(/^\/users\/\d+$/) && method === 'PUT') {
+    if (path.match(/^\/users\/[\w-]+$/) && method === 'PUT') {
       const id = path.split('/')[2];
       const { firstName, lastName, email, phoneNumber, gender, birthdate, pointsBalance } = req.body;
       
@@ -716,7 +716,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Delete user
-    if (path.match(/^\/users\/\d+$/) && method === 'DELETE') {
+    if (path.match(/^\/users\/[\w-]+$/) && method === 'DELETE') {
       const id = path.split('/')[2];
       const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
       if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -756,7 +756,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Adjust user points
-    if (path.match(/^\/users\/\d+\/points$/) && method === 'PUT') {
+    if (path.match(/^\/users\/[\w-]+\/points$/) && method === 'PUT') {
       const id = path.split('/')[2];
       const { adjustment, reason } = req.body;
       
@@ -787,7 +787,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(result.rows);
     }
 
-    if (path.match(/^\/receipts\/user\/\d+$/) && method === 'GET') {
+    if (path.match(/^\/receipts\/user\/[\w-]+$/) && method === 'GET') {
       const userId = path.split('/')[3];
       const result = await pool.query(`
         SELECT r.id, r.user_id as "userId", r.supermarket_name as "supermarketName",
