@@ -3,6 +3,30 @@ import { User, Receipt, Campaign, Supermarket, Notification, Partner, Admin } fr
 const API_PREFIX = '/api';
 
 export const api = {
+  upload: {
+    image: async (file: File): Promise<{ url: string }> => {
+      // Convert file to base64
+      const buffer = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+      
+      const res = await fetch(`${API_PREFIX}/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          data: base64
+        })
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.details || 'Failed to upload image');
+      }
+      
+      return res.json();
+    }
+  },
   auth: {
     shopperLogin: async (phone: string, pin: string): Promise<{ success: boolean; user?: User; error?: string }> => {
       const res = await fetch(`${API_PREFIX}/auth/shopper/login`, {

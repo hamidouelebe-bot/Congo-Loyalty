@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
+import { put } from '@vercel/blob';
 
 // Database connection
 const getDatabaseUrl = () => {
@@ -316,6 +317,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ============ HEALTH CHECK ============
     if ((path === '/' || path === '') && method === 'GET') {
       return res.json({ status: 'ok', message: 'DRC Loyalty API is running', timestamp: new Date().toISOString() });
+    }
+
+    // ============ FILE UPLOAD ============
+    if (path === '/upload' && method === 'POST') {
+      console.log('[UPLOAD] Processing file upload...');
+      
+      // Get the file from the request body (base64 encoded)
+      const { filename, contentType, data } = req.body;
+      
+      if (!filename || !data) {
+        return res.status(400).json({ error: 'Filename and data are required' });
+      }
+      
+      try {
+        // Convert base64 to buffer
+        const buffer = Buffer.from(data, 'base64');
+        
+        // Upload to Vercel Blob
+        const blob = await put(`rewards/${Date.now()}-${filename}`, buffer, {
+          access: 'public',
+          contentType: contentType || 'image/jpeg'
+        });
+        
+        console.log('[UPLOAD] File uploaded:', blob.url);
+        return res.json({ url: blob.url });
+      } catch (uploadError: any) {
+        console.error('[UPLOAD] Error:', uploadError.message);
+        return res.status(500).json({ error: 'Failed to upload file', details: uploadError.message });
+      }
     }
 
     // ============ REWARDS ============

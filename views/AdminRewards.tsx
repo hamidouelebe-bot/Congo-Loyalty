@@ -34,6 +34,9 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
   });
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -66,6 +69,8 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
       imageUrl: '',
       partnerId: ''
     });
+    setImageFile(null);
+    setImagePreview('');
     setIsModalOpen(true);
     setError('');
   };
@@ -80,8 +85,29 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
       imageUrl: reward.imageUrl,
       partnerId: reward.partnerId?.toString() || ''
     });
+    setImageFile(null);
+    setImagePreview(reward.imageUrl || '');
     setIsModalOpen(true);
     setError('');
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError(lang === 'fr' ? 'Veuillez sélectionner une image' : 'Please select an image file');
+        return;
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError(lang === 'fr' ? 'L\'image ne doit pas dépasser 5MB' : 'Image must be less than 5MB');
+        return;
+      }
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+      setError('');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,34 +115,53 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
     setError('');
 
     if (!formData.title || !formData.cost || !formData.type || !formData.brand) {
-      setError('Please fill in all required fields');
+      setError(lang === 'fr' ? 'Veuillez remplir tous les champs obligatoires' : 'Please fill in all required fields');
       return;
     }
 
     try {
+      setIsUploading(true);
+      let imageUrl = formData.imageUrl;
+
+      // Upload image if a new file was selected
+      if (imageFile) {
+        try {
+          const uploadResult = await api.upload.image(imageFile);
+          imageUrl = uploadResult.url;
+        } catch (uploadErr: any) {
+          setError(lang === 'fr' ? `Échec du téléchargement: ${uploadErr.message}` : `Upload failed: ${uploadErr.message}`);
+          setIsUploading(false);
+          return;
+        }
+      }
+
       const payload = {
         title: formData.title,
         cost: Number(formData.cost),
         type: formData.type,
         brand: formData.brand,
-        imageUrl: formData.imageUrl || 'https://picsum.photos/200/200',
+        imageUrl: imageUrl || '',
         partnerId: formData.partnerId ? parseInt(formData.partnerId) : undefined
       };
 
       if (editingReward) {
         const updated = await api.rewards.update(editingReward.id, payload);
         setRewards(rewards.map(r => r.id === editingReward.id ? updated : r));
-        setSuccessMessage('Reward updated successfully');
+        setSuccessMessage(lang === 'fr' ? 'Récompense mise à jour' : 'Reward updated successfully');
       } else {
         const created = await api.rewards.create(payload);
         setRewards([...rewards, created]);
-        setSuccessMessage('Reward created successfully');
+        setSuccessMessage(lang === 'fr' ? 'Récompense créée' : 'Reward created successfully');
       }
       setIsModalOpen(false);
+      setImageFile(null);
+      setImagePreview('');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       console.error('Failed to save reward:', err);
-      setError('Failed to save reward');
+      setError(lang === 'fr' ? 'Échec de l\'enregistrement' : 'Failed to save reward');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -417,15 +462,57 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {lang === 'fr' ? 'URL de l\'image' : 'Image URL'}
+                  {lang === 'fr' ? 'Image' : 'Image'}
                 </label>
-                <input
-                  type="url"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="https://example.com/image.jpg"
-                />
+                <div className="space-y-3">
+                  {/* Image Preview */}
+                  {imagePreview && (
+                    <div className="relative w-32 h-32">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover rounded-lg border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageFile(null);
+                          setImagePreview('');
+                          setFormData({ ...formData, imageUrl: '' });
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* File Input */}
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {lang === 'fr' ? 'Choisir une image' : 'Choose Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                    {imageFile && (
+                      <span className="text-sm text-gray-500 truncate max-w-[150px]">
+                        {imageFile.name}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {lang === 'fr' ? 'PNG, JPG, GIF jusqu\'à 5MB' : 'PNG, JPG, GIF up to 5MB'}
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -450,17 +537,29 @@ const AdminRewards: React.FC<AdminRewardsProps> = ({ lang }) => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={isUploading}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
                   {lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={isUploading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
                 >
-                  {editingReward 
-                    ? (lang === 'fr' ? 'Mettre à jour' : 'Update')
-                    : (lang === 'fr' ? 'Créer' : 'Create')}
+                  {isUploading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {lang === 'fr' ? 'Envoi...' : 'Uploading...'}
+                    </>
+                  ) : (
+                    editingReward 
+                      ? (lang === 'fr' ? 'Mettre à jour' : 'Update')
+                      : (lang === 'fr' ? 'Créer' : 'Create')
+                  )}
                 </button>
               </div>
             </form>
