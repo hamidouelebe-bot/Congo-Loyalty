@@ -688,6 +688,91 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
+    // Update user (full update)
+    if (path.match(/^\/users\/\d+$/) && method === 'PUT') {
+      const id = path.split('/')[2];
+      const { firstName, lastName, email, phoneNumber, gender, birthdate, pointsBalance } = req.body;
+      
+      const result = await pool.query(`
+        UPDATE users SET 
+          first_name = COALESCE($1, first_name),
+          last_name = COALESCE($2, last_name),
+          email = COALESCE($3, email),
+          phone_number = COALESCE($4, phone_number),
+          gender = COALESCE($5, gender),
+          birthdate = COALESCE($6, birthdate),
+          points_balance = COALESCE($7, points_balance)
+        WHERE id = $8
+        RETURNING id, first_name as "firstName", last_name as "lastName", email,
+          phone_number as "phoneNumber", status, points_balance as "pointsBalance",
+          points_expiring as "pointsExpiring", to_char(points_expires_at, 'YYYY-MM-DD') as "pointsExpiresAt",
+          total_spent as "totalSpent", to_char(joined_date, 'YYYY-MM-DD') as "joinedDate",
+          gender, to_char(birthdate, 'YYYY-MM-DD') as "birthdate",
+          CASE WHEN total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
+      `, [firstName, lastName, email, phoneNumber, gender, birthdate, pointsBalance, id]);
+      
+      if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+      return res.json(result.rows[0]);
+    }
+
+    // Delete user
+    if (path.match(/^\/users\/\d+$/) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+      return res.status(204).end();
+    }
+
+    // Create user (admin creating a user)
+    if (path === '/users' && method === 'POST') {
+      const { firstName, lastName, email, phoneNumber, pin, gender, birthdate } = req.body;
+      
+      if (!firstName || !lastName || !phoneNumber || !pin) {
+        return res.status(400).json({ error: 'First name, last name, phone number, and PIN are required' });
+      }
+      
+      const cleanPhone = phoneNumber.replace(/\s/g, '');
+      
+      // Check if phone already exists
+      const check = await pool.query('SELECT id FROM users WHERE phone_number = $1', [cleanPhone]);
+      if (check.rows.length > 0) {
+        return res.status(400).json({ error: 'Phone number already registered' });
+      }
+      
+      // Hash PIN
+      const hashedPin = await bcrypt.hash(pin, 10);
+      
+      const result = await pool.query(`
+        INSERT INTO users (first_name, last_name, email, phone_number, pin, gender, birthdate, status, points_balance, joined_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 0, NOW())
+        RETURNING id, first_name as "firstName", last_name as "lastName", email,
+          phone_number as "phoneNumber", status, points_balance as "pointsBalance",
+          0 as "pointsExpiring", NULL as "pointsExpiresAt", 0 as "totalSpent",
+          to_char(joined_date, 'YYYY-MM-DD') as "joinedDate", gender,
+          to_char(birthdate, 'YYYY-MM-DD') as "birthdate", 'New' as segment
+      `, [firstName, lastName, email || null, cleanPhone, hashedPin, gender || null, birthdate || null]);
+      
+      return res.status(201).json(result.rows[0]);
+    }
+
+    // Adjust user points
+    if (path.match(/^\/users\/\d+\/points$/) && method === 'PUT') {
+      const id = path.split('/')[2];
+      const { adjustment, reason } = req.body;
+      
+      if (adjustment === undefined) {
+        return res.status(400).json({ error: 'Adjustment amount is required' });
+      }
+      
+      const result = await pool.query(`
+        UPDATE users SET points_balance = points_balance + $1 WHERE id = $2
+        RETURNING id, points_balance as "pointsBalance"
+      `, [adjustment, id]);
+      
+      if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+      return res.json({ success: true, newBalance: result.rows[0].pointsBalance });
+    }
+
     // ============ RECEIPTS ============
     if (path === '/receipts' && method === 'GET') {
       const result = await pool.query(`

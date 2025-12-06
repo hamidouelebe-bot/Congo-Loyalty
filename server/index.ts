@@ -597,7 +597,6 @@ app.get('/api/users', async (req, res) => {
         last_name as "lastName",
         email,
         phone_number as "phoneNumber",
-        pin,
         status,
         points_balance as "pointsBalance",
         points_expiring as "pointsExpiring",
@@ -614,6 +613,112 @@ app.get('/api/users', async (req, res) => {
       ORDER BY created_at DESC
     `);
     res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create User
+app.post('/api/users', async (req, res) => {
+  try {
+    const { firstName, lastName, email, phoneNumber, pin, gender, birthdate } = req.body;
+    
+    if (!firstName || !lastName || !phoneNumber || !pin) {
+      return res.status(400).json({ error: 'First name, last name, phone number, and PIN are required' });
+    }
+    
+    const cleanPhone = phoneNumber.replace(/\s/g, '');
+    
+    // Check if phone already exists
+    const check = await pool.query('SELECT id FROM users WHERE phone_number = $1', [cleanPhone]);
+    if (check.rows.length > 0) {
+      return res.status(400).json({ error: 'Phone number already registered' });
+    }
+    
+    // Hash PIN
+    const bcrypt = require('bcryptjs');
+    const hashedPin = await bcrypt.hash(pin, 10);
+    
+    const result = await pool.query(`
+      INSERT INTO users (first_name, last_name, email, phone_number, pin, gender, birthdate, status, points_balance, joined_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 0, NOW())
+      RETURNING id, first_name as "firstName", last_name as "lastName", email,
+        phone_number as "phoneNumber", status, points_balance as "pointsBalance",
+        0 as "pointsExpiring", NULL as "pointsExpiresAt", 0 as "totalSpent",
+        to_char(joined_date, 'YYYY-MM-DD') as "joinedDate", gender,
+        to_char(birthdate, 'YYYY-MM-DD') as "birthdate", 'New' as segment
+    `, [firstName, lastName, email || null, cleanPhone, hashedPin, gender || null, birthdate || null]);
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update User
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, email, phoneNumber, gender, birthdate, pointsBalance } = req.body;
+    
+    const result = await pool.query(`
+      UPDATE users SET 
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        email = COALESCE($3, email),
+        phone_number = COALESCE($4, phone_number),
+        gender = COALESCE($5, gender),
+        birthdate = COALESCE($6, birthdate),
+        points_balance = COALESCE($7, points_balance)
+      WHERE id = $8
+      RETURNING id, first_name as "firstName", last_name as "lastName", email,
+        phone_number as "phoneNumber", status, points_balance as "pointsBalance",
+        points_expiring as "pointsExpiring", to_char(points_expires_at, 'YYYY-MM-DD') as "pointsExpiresAt",
+        total_spent as "totalSpent", to_char(joined_date, 'YYYY-MM-DD') as "joinedDate",
+        gender, to_char(birthdate, 'YYYY-MM-DD') as "birthdate",
+        CASE WHEN total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
+    `, [firstName, lastName, email, phoneNumber, gender, birthdate, pointsBalance, id]);
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete User
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Adjust User Points
+app.put('/api/users/:id/points', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adjustment, reason } = req.body;
+    
+    if (adjustment === undefined) {
+      return res.status(400).json({ error: 'Adjustment amount is required' });
+    }
+    
+    const result = await pool.query(`
+      UPDATE users SET points_balance = points_balance + $1 WHERE id = $2
+      RETURNING id, points_balance as "pointsBalance"
+    `, [adjustment, id]);
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, newBalance: result.rows[0].pointsBalance });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

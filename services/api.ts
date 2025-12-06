@@ -139,6 +139,33 @@ export const api = {
       if (!res.ok) throw new Error('Failed to fetch user');
       return res.json();
     },
+    create: async (data: { firstName: string; lastName: string; email?: string; phoneNumber: string; pin: string; gender?: string; birthdate?: string }): Promise<User> => {
+      const res = await fetch(`${API_PREFIX}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create user');
+      }
+      return res.json();
+    },
+    update: async (id: string, data: { firstName?: string; lastName?: string; email?: string; phoneNumber?: string; gender?: string; birthdate?: string; pointsBalance?: number }): Promise<User> => {
+      const res = await fetch(`${API_PREFIX}/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to update user');
+      return res.json();
+    },
+    delete: async (id: string): Promise<void> => {
+      const res = await fetch(`${API_PREFIX}/users/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete user');
+    },
     updateStatus: async (id: string, status: string): Promise<void> => {
       const res = await fetch(`${API_PREFIX}/users/${id}/status`, {
         method: 'PUT',
@@ -146,6 +173,15 @@ export const api = {
         body: JSON.stringify({ status })
       });
       if (!res.ok) throw new Error('Failed to update user status');
+    },
+    adjustPoints: async (id: string, adjustment: number, reason?: string): Promise<{ success: boolean; newBalance: number }> => {
+      const res = await fetch(`${API_PREFIX}/users/${id}/points`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adjustment, reason })
+      });
+      if (!res.ok) throw new Error('Failed to adjust points');
+      return res.json();
     }
   },
   receipts: {
