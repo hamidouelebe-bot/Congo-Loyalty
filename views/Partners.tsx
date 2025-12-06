@@ -131,9 +131,9 @@ const Partners: React.FC<PartnersProps> = ({ lang, partners, setPartners }) => {
         setError(lang === 'fr' ? 'Veuillez sélectionner une image' : 'Please select an image file');
         return;
       }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError(lang === 'fr' ? 'L\'image ne doit pas dépasser 5MB' : 'Image must be less than 5MB');
+      // Validate file size (max 2MB for reliable upload)
+      if (file.size > 2 * 1024 * 1024) {
+        setError(lang === 'fr' ? 'L\'image ne doit pas dépasser 2MB' : 'Image must be less than 2MB');
         return;
       }
       setLogoFile(file);
