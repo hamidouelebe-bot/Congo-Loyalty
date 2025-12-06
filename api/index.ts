@@ -867,8 +867,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const campaignId = result.rows[0].id;
 
       if (supermarketIds && supermarketIds.length > 0) {
-        const values = supermarketIds.map((sid: string) => `(${campaignId}, '${sid}')`).join(',');
-        await pool.query(`INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) VALUES ${values}`);
+        await pool.query(
+          `INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) 
+           SELECT $1, unnest($2::uuid[])`,
+          [campaignId, supermarketIds]
+        );
       }
 
       return res.status(201).json({ ...result.rows[0], supermarketIds: supermarketIds || [] });
@@ -896,8 +899,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (supermarketIds) {
         await pool.query('DELETE FROM campaign_supermarkets WHERE campaign_id = $1', [id]);
         if (supermarketIds.length > 0) {
-          const values = supermarketIds.map((sid: string) => `(${id}, '${sid}')`).join(',');
-          await pool.query(`INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) VALUES ${values}`);
+          await pool.query(
+            `INSERT INTO campaign_supermarkets (campaign_id, supermarket_id) 
+             SELECT $1, unnest($2::uuid[])`,
+            [id, supermarketIds]
+          );
         }
       }
 
@@ -1038,8 +1044,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { supermarketIds } = req.body;
       await pool.query('DELETE FROM partner_supermarkets WHERE partner_id = $1', [id]);
       if (supermarketIds && supermarketIds.length > 0) {
-        const values = supermarketIds.map((sid: string) => `(${id}, '${sid}')`).join(',');
-        await pool.query(`INSERT INTO partner_supermarkets (partner_id, supermarket_id) VALUES ${values}`);
+        await pool.query(
+          `INSERT INTO partner_supermarkets (partner_id, supermarket_id) 
+           SELECT $1, unnest($2::uuid[])`,
+          [id, supermarketIds]
+        );
       }
       return res.json({ success: true });
     }
