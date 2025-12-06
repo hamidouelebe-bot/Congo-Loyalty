@@ -324,6 +324,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (path === '/upload' && method === 'POST') {
       console.log('[UPLOAD] Processing file upload...');
       
+      // Check for Blob Token
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        console.error('[UPLOAD] BLOB_READ_WRITE_TOKEN is missing');
+        return res.status(500).json({ error: 'Server configuration error: BLOB_READ_WRITE_TOKEN missing' });
+      }
+
       // Get the file from the request body (base64 encoded)
       const { filename, contentType, data } = req.body;
       
@@ -341,11 +347,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contentType: contentType || 'image/jpeg'
         });
         
-        console.log('[UPLOAD] File uploaded:', blob.url);
+        console.log('[UPLOAD] File uploaded to Vercel Blob:', blob.url);
         return res.json({ url: blob.url });
       } catch (uploadError: any) {
         console.error('[UPLOAD] Error:', uploadError.message);
-        return res.status(500).json({ error: 'Failed to upload file', details: uploadError.message });
+        return res.status(500).json({ error: 'Failed to upload file to Blob', details: uploadError.message });
       }
     }
 
