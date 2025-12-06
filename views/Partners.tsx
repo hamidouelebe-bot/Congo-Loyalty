@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { TRANSLATIONS } from '../constants';
 import { Language, Supermarket } from '../types';
 import Modal from '../components/Modal';
+import { api } from '../services/api';
 
 interface PartnersProps {
   lang: Language;
@@ -58,7 +59,7 @@ const Partners: React.FC<PartnersProps> = ({ lang, partners, setPartners }) => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const updatedData = {
       name: formData.name,
@@ -69,29 +70,43 @@ const Partners: React.FC<PartnersProps> = ({ lang, partners, setPartners }) => {
       longitude: formData.longitude ? parseFloat(formData.longitude) : undefined
     };
 
-    if (editingPartner) {
-      // Update existing
-      setPartners(partners.map(p => p.id === editingPartner.id ? { ...p, ...updatedData } : p));
-    } else {
-      // Create new
-      const newPartner: Supermarket = {
-        id: (partners.length + 1).toString(),
-        active: true,
-        avgBasket: 0,
-        ...updatedData
-      };
-      setPartners([...partners, newPartner]);
+    try {
+      if (editingPartner) {
+        // Update existing
+        const updatedPartner = await api.supermarkets.update(editingPartner.id, updatedData);
+        setPartners(partners.map(p => p.id === editingPartner.id ? updatedPartner : p));
+      } else {
+        // Create new
+        const newPartner = await api.supermarkets.create(updatedData);
+        setPartners([...partners, newPartner]);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Failed to save partner:", error);
+      alert("Failed to save partner");
     }
-    setIsModalOpen(false);
   };
 
-  const toggleStatus = (id: string) => {
-    setPartners(partners.map(p => p.id === id ? { ...p, active: !p.active } : p));
+  const toggleStatus = async (id: string) => {
+    const partner = partners.find(p => p.id === id);
+    if (!partner) return;
+    try {
+      const updated = await api.supermarkets.update(id, { active: !partner.active });
+      setPartners(partners.map(p => p.id === id ? updated : p));
+    } catch (error) {
+      console.error("Failed to toggle status:", error);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this partner? This action cannot be undone.')) {
-      setPartners(partners.filter(p => p.id !== id));
+      try {
+        await api.supermarkets.delete(id);
+        setPartners(partners.filter(p => p.id !== id));
+      } catch (error) {
+        console.error("Failed to delete partner:", error);
+        alert("Failed to delete partner");
+      }
     }
   };
 

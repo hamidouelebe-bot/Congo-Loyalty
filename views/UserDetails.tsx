@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
-import { MOCK_USERS, MOCK_RECEIPTS, TRANSLATIONS } from '../constants';
-import { Language, UserStatus, AppView, UserSegment } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TRANSLATIONS } from '../constants';
+import { Language, UserStatus, AppView, UserSegment, User, Receipt } from '../types';
+import { api } from '../services/api';
 
 interface UserDetailsProps {
   userId: string | null;
@@ -11,20 +12,59 @@ interface UserDetailsProps {
 
 const UserDetails: React.FC<UserDetailsProps> = ({ userId, lang, onNavigate }) => {
   const t = TRANSLATIONS[lang];
-  // Find the user or fallback to first if not found (dev safety)
-  const initialUser = MOCK_USERS.find(u => u.id === userId) || MOCK_USERS[0];
-  const [user, setUser] = useState(initialUser);
+  const [user, setUser] = useState<User | null>(null);
+  const [userReceipts, setUserReceipts] = useState<Receipt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const userReceipts = MOCK_RECEIPTS.filter(r => r.userId === user.id);
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      if (!userId) return;
+      try {
+        setIsLoading(true);
+        const [userData, receiptsData] = await Promise.all([
+          api.users.getById(userId),
+          api.receipts.getByUserId(userId)
+        ]);
+        setUser(userData);
+        setUserReceipts(receiptsData);
+      } catch (error) {
+        console.error("Failed to fetch user details:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleBan = () => {
+    fetchUserDetails();
+  }, [userId]);
+
+  if (isLoading) {
+    return <div className="p-8 text-center">Loading user details...</div>;
+  }
+
+  if (!user) {
+    return <div className="p-8 text-center">User not found.</div>;
+  }
+
+  const handleBan = async () => {
     if (confirm(`Are you sure you want to ban ${user.firstName}?`)) {
-      setUser({ ...user, status: UserStatus.Banned });
+      try {
+        await api.users.updateStatus(user.id, UserStatus.Banned);
+        setUser({ ...user, status: UserStatus.Banned });
+      } catch (error) {
+        console.error("Failed to ban user:", error);
+        alert("Failed to ban user");
+      }
     }
   };
 
-  const handleUnban = () => {
-    setUser({ ...user, status: UserStatus.Active });
+  const handleUnban = async () => {
+    try {
+      await api.users.updateStatus(user.id, UserStatus.Active);
+      setUser({ ...user, status: UserStatus.Active });
+    } catch (error) {
+      console.error("Failed to unban user:", error);
+      alert("Failed to unban user");
+    }
   };
 
   const handleSegmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -142,7 +182,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, lang, onNavigate }) =
                  <span className="font-bold text-blue-900 text-sm">Automated Logic:</span>
               </div>
               <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
-                 <li><strong>VIP:</strong> > 2,000 Points</li>
+                 <li><strong>VIP:</strong> {'>'} 2,000 Points</li>
                  <li><strong>New:</strong> Joined within 30 days</li>
                  <li><strong>Churn Risk:</strong> 2+ Rejected receipts</li>
               </ul>

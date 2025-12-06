@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
-import { AppView, Language, User, UserStatus } from '../types';
+import { AppView, Language, User } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { db, isConfigured } from '../firebaseConfig';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { api } from '../services/api';
 
 interface ShopperSignupProps {
   onLogin: (user: User) => void;
@@ -34,28 +33,16 @@ const ShopperSignup: React.FC<ShopperSignupProps> = ({ onLogin, onNavigate, lang
   const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     try {
-      if (isConfigured) {
-        // 1. Check if user already exists in DB
-        const q = query(collection(db, 'users'), where('phoneNumber', '==', formData.phone));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          alert("This phone number is already registered. Please log in.");
-          onNavigate(AppView.ShopperLogin);
-          return;
-        }
+      const res = await api.auth.sendOtp(formData.email);
+      if (res.success) {
+         setStep('otp');
       } else {
-        console.warn("Skipping Duplicate User Check (Demo Mode)");
+         alert(res.error || "Failed to send verification code.");
       }
-
-      // 2. Move to OTP step
-      setStep('otp');
-      
     } catch (error) {
-      console.error("Signup Error:", error);
-      setStep('otp');
+      console.error("OTP Error:", error);
+      alert("Failed to send verification code. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -65,46 +52,16 @@ const ShopperSignup: React.FC<ShopperSignupProps> = ({ onLogin, onNavigate, lang
     e.preventDefault();
     setIsLoading(true);
 
-    if (otp !== '123456') {
-      alert('Invalid OTP Code. Try 123456');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      // Create User Object
-      const newUserBase: Omit<User, 'id'> = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phoneNumber: formData.phone,
-        status: UserStatus.Active,
-        pointsBalance: 50, // Welcome Bonus
-        pointsExpiring: 0,
-        nextExpirationDate: null,
-        pointsExpiresAt: null,
-        totalSpent: 0,
-        joinedDate: new Date().toISOString().split('T')[0],
-        gender: formData.gender as 'Male' | 'Female' | 'Other',
-        birthdate: formData.birthdate,
-        // @ts-ignore
-        pin: formData.pin 
-      };
-
-      let finalUser: User;
-
-      if (isConfigured) {
-         const docRef = await addDoc(collection(db, 'users'), newUserBase);
-         finalUser = { ...newUserBase, id: docRef.id } as User;
-      } else {
-         console.warn("Demo Mode: Simulating DB Write");
-         await new Promise(r => setTimeout(r, 800));
-         finalUser = { ...newUserBase, id: `demo-${Date.now()}` } as User;
-      }
+      // Pass form data AND otp
+      const response = await api.auth.shopperSignup({ ...formData, otp });
       
-      alert("Account created successfully!");
-      // Pass the new user to parent to login immediately
-      onLogin(finalUser);
+      if (response.success && response.user) {
+        alert("Account created successfully! Please check your email for a welcome message.");
+        onLogin(response.user);
+      } else {
+        alert(response.error || "Error creating account.");
+      }
 
     } catch (error) {
       console.error("Error creating account:", error);
@@ -276,7 +233,21 @@ const ShopperSignup: React.FC<ShopperSignupProps> = ({ onLogin, onNavigate, lang
                   </button>
 
                   <div className="text-center">
-                    <button type="button" onClick={() => alert('Code resent!')} className="text-sm text-blue-600 font-medium hover:underline">
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        setIsLoading(true);
+                        try {
+                          await api.auth.sendOtp(formData.email);
+                          alert('Verification code resent to ' + formData.email);
+                        } catch(e) {
+                          alert('Failed to resend code');
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }} 
+                      className="text-sm text-blue-600 font-medium hover:underline"
+                    >
                       {t.resend_code}
                     </button>
                     <div className="mt-4">

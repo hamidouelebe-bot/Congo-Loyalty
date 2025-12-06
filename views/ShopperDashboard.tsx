@@ -1,8 +1,9 @@
 
-import React from 'react';
-import { AppView, Language, User, Notification } from '../types';
-import { MOCK_RECEIPTS, TRANSLATIONS } from '../constants';
+import React, { useEffect, useState } from 'react';
+import { AppView, Language, User, Notification, Receipt } from '../types';
+import { TRANSLATIONS } from '../constants';
 import { IconCamera, IconGift, IconHome, IconUserCircle, IconBell } from '../components/Icons';
+import { api } from '../services/api';
 
 interface ShopperDashboardProps {
   onNavigate: (view: AppView) => void;
@@ -14,8 +15,20 @@ interface ShopperDashboardProps {
 
 const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogout, lang, user, notifications }) => {
   const t = TRANSLATIONS[lang].shopper;
+  const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
   
-  const recentReceipts = MOCK_RECEIPTS.filter(r => r.userId === user.id);
+  useEffect(() => {
+    const fetchReceipts = async () => {
+      try {
+        const data = await api.receipts.getByUserId(user.id);
+        // Take top 3
+        setRecentReceipts(data.slice(0, 3));
+      } catch (error) {
+        console.error("Failed to fetch receipts:", error);
+      }
+    };
+    fetchReceipts();
+  }, [user.id]);
   
   // Check for unread notifications
   const unreadCount = notifications.filter(n => !n.read && n.userId === user.id).length;

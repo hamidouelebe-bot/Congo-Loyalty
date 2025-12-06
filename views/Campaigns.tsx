@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
-import { MOCK_CAMPAIGNS, MOCK_SUPERMARKETS, TRANSLATIONS } from '../constants';
-import { Language, Campaign, AppView } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TRANSLATIONS } from '../constants';
+import { Language, Campaign, AppView, Supermarket } from '../types';
 import Modal from '../components/Modal';
+import { api } from '../services/api';
 
 interface CampaignsProps {
   lang: Language;
@@ -11,9 +12,29 @@ interface CampaignsProps {
 
 const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
   const t = TRANSLATIONS[lang];
-  const [campaigns, setCampaigns] = useState<Campaign[]>(MOCK_CAMPAIGNS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [supermarkets, setSupermarkets] = useState<Supermarket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [campaignsData, supermarketsData] = await Promise.all([
+          api.campaigns.getAll(),
+          api.supermarkets.getAll()
+        ]);
+        setCampaigns(campaignsData);
+        setSupermarkets(supermarketsData);
+      } catch (error) {
+        console.error("Failed to fetch campaigns data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -376,7 +397,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{lang === 'fr' ? 'Points de Vente Participants' : 'Participating Point of Sales (POS)'}</label>
             <div className="grid grid-cols-2 gap-2 border border-gray-200 rounded-lg p-2 max-h-32 overflow-y-auto">
-               {MOCK_SUPERMARKETS.map(store => (
+               {supermarkets.map(store => (
                  <label key={store.id} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                     <input 
                       type="checkbox" 

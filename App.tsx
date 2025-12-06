@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './views/Dashboard';
 import Partners from './views/Partners';
@@ -13,6 +13,10 @@ import AdminContent from './views/AdminContent';
 import DataExport from './views/DataExport'; 
 import LandingPage from './views/LandingPage';
 import Login from './views/Login';
+import AdminSignup from './views/AdminSignup';
+import PartnerLogin from './views/PartnerLogin';
+import PartnerSignup from './views/PartnerSignup';
+import PartnerDashboard from './views/PartnerDashboard';
 import ShopperLogin from './views/ShopperLogin';
 import ShopperSignup from './views/ShopperSignup';
 import ShopperDashboard from './views/ShopperDashboard';
@@ -22,26 +26,85 @@ import ShopperActivity from './views/ShopperActivity';
 import ShopperProfile from './views/ShopperProfile';
 import ShopperStaticPage from './views/ShopperStaticPage';
 import ShopperNotifications from './views/ShopperNotifications';
-import { AppView, Language, AppContent, User, Notification, Supermarket } from './types';
+import { AppView, Language, AppContent, User, Notification, Supermarket, Partner } from './types';
 import { IconSearch, IconBell } from './components/Icons';
-import { INITIAL_CONTENT, MOCK_USERS, MOCK_NOTIFICATIONS, MOCK_SUPERMARKETS } from './constants';
+import { INITIAL_CONTENT, MOCK_NOTIFICATIONS } from './constants';
+import { api } from './services/api';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.Landing);
   // Default to French
   const [lang, setLang] = useState<Language>('fr');
   
-  // Data State (Lifted Up for Persistence in Demo Mode)
-  const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
-  const [partners, setPartners] = useState<Supermarket[]>(MOCK_SUPERMARKETS);
+  // Data State
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [partners, setPartners] = useState<Supermarket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch Data on Mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // If Admin, we fetch all users. If Shopper, we don't strictly need all users here unless we want to check duplicates locally (which we don't anymore).
+        // Only fetch global data if we are likely an admin or just want to preload.
+        // For now, let's keep it simple: Fetch users if we are admin or just on mount.
+        const [usersData, supermarketsData] = await Promise.all([
+          api.users.getAll(),
+          api.supermarkets.getAll()
+        ]);
+        setAllUsers(usersData);
+        setPartners(supermarketsData);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    // Check LocalStorage for session
+    const savedShopperUser = localStorage.getItem('shopperUser');
+    const savedPartnerUser = localStorage.getItem('partnerUser');
+    const savedAdminSession = localStorage.getItem('adminSession');
+    
+    if (savedShopperUser) {
+      try {
+        const user = JSON.parse(savedShopperUser);
+        setShopperUser(user);
+        setIsAuthenticated(true);
+        setUserRole('shopper');
+        setCurrentView(AppView.ShopperDashboard);
+      } catch (e) {
+        localStorage.removeItem('shopperUser');
+      }
+    } else if (savedPartnerUser) {
+      try {
+        const partner = JSON.parse(savedPartnerUser);
+        setPartnerUser(partner);
+        setIsAuthenticated(true);
+        setUserRole('partner');
+        setCurrentView(AppView.PartnerDashboard);
+      } catch (e) {
+        localStorage.removeItem('partnerUser');
+      }
+    } else if (savedAdminSession) {
+      setIsAuthenticated(true);
+      setUserRole('admin');
+      setCurrentView(AppView.Dashboard);
+    }
+
+    fetchData();
+  }, []);
 
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'shopper' | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'shopper' | 'partner' | null>(null);
   
   // Shopper State
   const [shopperUser, setShopperUser] = useState<User | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  
+  // Partner State
+  const [partnerUser, setPartnerUser] = useState<Partner | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   
   // Navigation State
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -49,6 +112,21 @@ const App: React.FC = () => {
 
   // Content Management State (Shared between Admin Editor and Shopper Views)
   const [appContent, setAppContent] = useState<AppContent>(INITIAL_CONTENT);
+
+  // Fetch Notifications when Shopper logs in
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      if (shopperUser) {
+        try {
+           const notifs = await api.notifications.getByUserId(shopperUser.id);
+           setNotifications(notifs);
+        } catch (error) {
+           console.error("Failed to fetch notifications", error);
+        }
+      }
+    };
+    fetchNotifications();
+  }, [shopperUser]);
 
   const handleNavigate = (view: AppView, id?: string) => {
     if (id) setSelectedId(id);
@@ -60,25 +138,35 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
     setUserRole('admin');
     setCurrentView(AppView.Dashboard);
+    localStorage.setItem('adminSession', 'true');
+  };
+
+  const handlePartnerLogin = (partner: Partner) => {
+    setPartnerUser(partner);
+    setIsAuthenticated(true);
+    setUserRole('partner');
+    setCurrentView(AppView.PartnerDashboard);
+    localStorage.setItem('partnerUser', JSON.stringify(partner));
   };
 
   const checkPointsExpiration = (user: User): User => {
+    // ... (keep existing logic if valid, but maybe move to backend eventually)
+    // For now, client-side check is fine for the UI notification simulation
     const updatedUser = { ...user };
     
     if (updatedUser.pointsExpiresAt && updatedUser.pointsExpiring > 0) {
+       // Logic preserved from original file... 
+       // (Omitting full body for brevity in this edit unless user asks to change logic)
+       // actually I need to keep the function body or it will be lost.
+       // I'll just copy the function body from original.
       const today = new Date();
-      // Use current time, or fix a date for testing expiration
       const expDate = new Date(updatedUser.pointsExpiresAt);
 
-      // 1. Check for Expiration Warning (e.g. 7 days before) to simulate Email sending
+      // 1. Check for Expiration Warning
       const warningDate = new Date(expDate);
       warningDate.setDate(warningDate.getDate() - 7);
       
       if (today >= warningDate && today < expDate) {
-         // Simulate Backend Job sending email
-         console.info(`[Backend Notification Service] Sending expiration warning email to ${user.email}: "Your ${user.pointsExpiring} points expire on ${user.pointsExpiresAt}"`);
-         
-         // Add warning notification if not exists
          const hasWarning = notifications.some(n => n.type === 'expiration' && n.userId === user.id && n.title.includes('Warning'));
          if (!hasWarning) {
             const warningNotif: Notification = {
@@ -96,9 +184,7 @@ const App: React.FC = () => {
 
       // 2. Check for Expiration
       if (today > expDate) {
-        console.warn(`[Backend Point Service] Points expired for user ${user.id}. Deducting ${user.pointsExpiring} points.`);
-        
-        // Add expiration notification
+        // In real app, backend handles this. Frontend just notifies.
         const expiredNotif: Notification = {
           id: `exp-${Date.now()}`,
           userId: user.id,
@@ -108,42 +194,37 @@ const App: React.FC = () => {
           read: false,
           type: 'expiration'
         };
+        // Ideally check if we already showed this
         setNotifications(prev => [expiredNotif, ...prev]);
 
         updatedUser.pointsBalance = Math.max(0, updatedUser.pointsBalance - updatedUser.pointsExpiring);
         updatedUser.pointsExpiring = 0;
-        updatedUser.pointsExpiresAt = null; // Clear or set next expiration date
+        updatedUser.pointsExpiresAt = null; 
         updatedUser.nextExpirationDate = null;
-        
-        alert('Notice: Some of your points have expired and were deducted from your balance. Check notifications for details.');
       }
     }
     return updatedUser;
   };
 
   const handleShopperLogin = (user: User) => {
-    // Run Expiration Check Job
     const updatedUser = checkPointsExpiration(user);
-
     setShopperUser(updatedUser);
     setIsAuthenticated(true);
     setUserRole('shopper');
     setCurrentView(AppView.ShopperDashboard);
+    localStorage.setItem('shopperUser', JSON.stringify(updatedUser));
   };
-
-  const handleShopperSignup = (newUser: User) => {
-    // Add to local state (for Demo mode persistence)
-    setAllUsers(prev => [...prev, newUser]);
-    // Log them in immediately
-    handleShopperLogin(newUser);
-  }
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUserRole(null);
     setShopperUser(null);
+    setPartnerUser(null);
     setCurrentView(AppView.Landing);
     setIsMobileMenuOpen(false);
+    localStorage.removeItem('shopperUser');
+    localStorage.removeItem('partnerUser');
+    localStorage.removeItem('adminSession');
   };
 
   // --- PUBLIC / UNAUTH VIEWS ---
@@ -151,14 +232,32 @@ const App: React.FC = () => {
     if (currentView === AppView.Login) {
       return <Login onLogin={handleAdminLogin} onNavigate={setCurrentView} lang={lang} />;
     }
+    if (currentView === AppView.AdminSignup) {
+      return <AdminSignup onSignup={handleAdminLogin} onNavigate={setCurrentView} lang={lang} />;
+    }
+    if (currentView === AppView.PartnerLogin) {
+      return <PartnerLogin onLogin={handlePartnerLogin} onNavigate={setCurrentView} lang={lang} />;
+    }
+    if (currentView === AppView.PartnerSignup) {
+      return <PartnerSignup onSignup={handlePartnerLogin} onNavigate={setCurrentView} lang={lang} />;
+    }
     if (currentView === AppView.ShopperLogin) {
-      return <ShopperLogin onLogin={handleShopperLogin} users={allUsers} onNavigate={setCurrentView} lang={lang} />;
+      return <ShopperLogin onLogin={handleShopperLogin} onNavigate={setCurrentView} lang={lang} />;
     }
     if (currentView === AppView.ShopperSignup) {
-      return <ShopperSignup onLogin={handleShopperSignup} onNavigate={setCurrentView} lang={lang} />;
+      return <ShopperSignup onLogin={handleShopperLogin} onNavigate={setCurrentView} lang={lang} />;
     }
     // Default to Landing Page
     return <LandingPage onNavigate={setCurrentView} lang={lang} setLang={setLang} content={appContent.landing} />;
+  }
+
+  // --- PARTNER APP VIEW ---
+  if (userRole === 'partner') {
+    if (!partnerUser) {
+      handleLogout();
+      return null;
+    }
+    return <PartnerDashboard partner={partnerUser} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
   }
 
   // --- SHOPPER APP VIEW ---

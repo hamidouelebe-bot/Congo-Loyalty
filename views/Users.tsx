@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { TRANSLATIONS, MOCK_RECEIPTS } from '../constants';
+import React, { useState } from 'react';
+import { TRANSLATIONS } from '../constants';
 import { User, UserStatus, Language, AppView, UserSegment } from '../types';
 
 interface UsersProps {
@@ -13,53 +13,6 @@ interface UsersProps {
 const Users: React.FC<UsersProps> = ({ lang, onNavigate, users, setUsers }) => {
   const t = TRANSLATIONS[lang];
   const [search, setSearch] = useState('');
-
-  // Auto-Segmentation Logic
-  useEffect(() => {
-    // We update the local users state if we detect they don't have segments yet or if logic applies
-    // Note: In a real app this runs on backend. Here we simulate it on view load.
-    
-    const updatedUsers = users.map(user => {
-       // If manually set (e.g. from UserDetails), keep it? 
-       // For this requirement, we re-calculate unless it's strictly set. 
-       // We'll calculate a 'suggested' segment.
-       
-       let calculatedSegment: UserSegment = 'Regular';
-       
-       // 1. Churn Risk Logic: > 2 Rejected/Low Confidence Receipts
-       const userReceipts = MOCK_RECEIPTS.filter(r => r.userId === user.id);
-       const riskyReceipts = userReceipts.filter(r => r.status === 'rejected' || r.confidenceScore < 0.5).length;
-       if (riskyReceipts >= 2) {
-          calculatedSegment = 'ChurnRisk';
-       } 
-       // 2. VIP Logic: > 2000 Points
-       else if (user.pointsBalance > 2000) {
-          calculatedSegment = 'VIP';
-       }
-       // 3. New User Logic: Joined < 30 days ago
-       else {
-          const joinDate = new Date(user.joinedDate);
-          const diffTime = Math.abs(Date.now() - joinDate.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-          if (diffDays <= 30) {
-             calculatedSegment = 'New';
-          }
-       }
-       
-       // Apply if not set (or we can overwrite to enforce auto-rules)
-       // Let's only apply if 'segment' is missing to allow manual overrides from UserDetails to stick
-       if (!user.segment) {
-          return { ...user, segment: calculatedSegment };
-       }
-       return user;
-    });
-
-    // Only set if different to avoid infinite loop
-    const hasChanged = JSON.stringify(updatedUsers) !== JSON.stringify(users);
-    if (hasChanged) {
-       setUsers(updatedUsers);
-    }
-  }, [users.length]); // Run when user count changes
 
   const getStatusColor = (status: UserStatus) => {
     switch (status) {

@@ -58,6 +58,25 @@ export interface Supermarket {
   longitude?: number;
 }
 
+export interface Partner {
+  id: string;
+  name: string;
+  email: string;
+  companyName: string;
+  phone?: string;
+  role: 'partner';
+  supermarketIds: string[]; // Partner can manage these supermarkets
+  status: 'active' | 'pending' | 'suspended';
+  createdAt: string;
+}
+
+export interface Admin {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'super_admin';
+}
+
 export interface Campaign {
   id: string;
   name: string;
@@ -130,6 +149,10 @@ export interface AppContent {
 export enum AppView {
   Landing = 'landing',
   Login = 'login',
+  AdminSignup = 'admin_signup',
+  PartnerLogin = 'partner_login',
+  PartnerSignup = 'partner_signup',
+  PartnerDashboard = 'partner_dashboard',
   Dashboard = 'dashboard',
   Partners = 'partners',
   Users = 'users',
@@ -140,6 +163,7 @@ export enum AppView {
   AIAnalysis = 'ai_analysis',
   AdminContent = 'admin_content',
   DataExport = 'data_export',
+  AdminRewards = 'admin_rewards',
   // Shopper Views
   ShopperLogin = 'shopper_login',
   ShopperSignup = 'shopper_signup',

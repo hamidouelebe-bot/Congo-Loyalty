@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppView, Language, User } from '../types';
 import { IconHome, IconGift, IconCamera, IconUserCircle } from '../components/Icons';
+import { api } from '../services/api';
 
 interface ShopperRewardsProps {
   onNavigate: (view: AppView) => void;
@@ -18,23 +19,32 @@ interface Reward {
   brand: string;
 }
 
-const MOCK_REWARDS: Reward[] = [
-  { id: '1', title: '5000 FC Crédit', cost: 500, type: 'airtime', brand: 'Vodacom', imageUrl: 'https://picsum.photos/id/1/200/200' },
-  { id: '2', title: '10% de réduction Nido', cost: 200, type: 'voucher', brand: 'Nestlé', imageUrl: 'https://picsum.photos/id/2/200/200' },
-  { id: '3', title: 'Coca-Cola 33cl Gratuit', cost: 150, type: 'product', brand: 'Coca-Cola', imageUrl: 'https://picsum.photos/id/3/200/200' },
-  { id: '4', title: 'Billet Cinéma', cost: 1000, type: 'voucher', brand: 'CineKin', imageUrl: 'https://picsum.photos/id/4/200/200' },
-  { id: '5', title: 'Sac de Course', cost: 50, type: 'product', brand: 'Kin Marché', imageUrl: 'https://picsum.photos/id/5/200/200' },
-];
-
 const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user }) => {
   const [userPoints, setUserPoints] = useState(user.pointsBalance);
   const [filter, setFilter] = useState<'all' | 'voucher' | 'airtime' | 'product'>('all');
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredRewards = filter === 'all' ? MOCK_REWARDS : MOCK_REWARDS.filter(r => r.type === filter);
+  useEffect(() => {
+    const fetchRewards = async () => {
+      try {
+        const data = await api.rewards.getAll();
+        setRewards(data);
+      } catch (error) {
+        console.error("Failed to fetch rewards:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchRewards();
+  }, []);
+
+  const filteredRewards = filter === 'all' ? rewards : rewards.filter(r => r.type === filter);
 
   const handleRedeem = (reward: Reward) => {
     if (userPoints >= reward.cost) {
       if(confirm(`Échanger ${reward.title} pour ${reward.cost} points ?`)) {
+        // In a real app, call API to redeem
         setUserPoints(prev => prev - reward.cost);
         alert('Récompense échangée ! Vérifiez vos SMS.');
       }
@@ -76,36 +86,42 @@ const ShopperRewards: React.FC<ShopperRewardsProps> = ({ onNavigate, lang, user 
 
       {/* Rewards Grid */}
       <div className="p-6 grid grid-cols-2 gap-4">
-        {filteredRewards.map(reward => (
-          <div key={reward.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 flex flex-col">
-            <div className="h-32 bg-gray-200 relative">
-               <img src={reward.imageUrl} alt={reward.title} className="w-full h-full object-cover" />
-               <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-sm">
-                 {reward.brand}
-               </span>
-            </div>
-            <div className="p-3 flex-1 flex flex-col">
-              <h3 className="font-bold text-gray-900 text-sm leading-tight mb-1">{reward.title}</h3>
-              <p className="text-xs text-gray-500 capitalize mb-3">
-                {reward.type === 'airtime' ? 'Crédit' : reward.type === 'product' ? 'Produit' : 'Bon'}
-              </p>
-              
-              <div className="mt-auto">
-                 <button 
-                  onClick={() => handleRedeem(reward)}
-                  disabled={userPoints < reward.cost}
-                  className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
-                    userPoints >= reward.cost 
-                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                 >
-                   {reward.cost} Pts
-                 </button>
+        {isLoading ? (
+           <div className="col-span-2 text-center py-8 text-gray-500">Chargement des récompenses...</div>
+        ) : filteredRewards.length === 0 ? (
+           <div className="col-span-2 text-center py-8 text-gray-500">Aucune récompense trouvée.</div>
+        ) : (
+          filteredRewards.map(reward => (
+            <div key={reward.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 flex flex-col">
+              <div className="h-32 bg-gray-200 relative">
+                 <img src={reward.imageUrl} alt={reward.title} className="w-full h-full object-cover" />
+                 <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-sm">
+                   {reward.brand}
+                 </span>
+              </div>
+              <div className="p-3 flex-1 flex flex-col">
+                <h3 className="font-bold text-gray-900 text-sm leading-tight mb-1">{reward.title}</h3>
+                <p className="text-xs text-gray-500 capitalize mb-3">
+                  {reward.type === 'airtime' ? 'Crédit' : reward.type === 'product' ? 'Produit' : 'Bon'}
+                </p>
+                
+                <div className="mt-auto">
+                   <button 
+                    onClick={() => handleRedeem(reward)}
+                    disabled={userPoints < reward.cost}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
+                      userPoints >= reward.cost 
+                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                   >
+                     {reward.cost} Pts
+                   </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Bottom Nav */}

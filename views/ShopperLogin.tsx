@@ -1,18 +1,15 @@
-
 import React, { useState } from 'react';
 import { AppView, Language, User } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { db, isConfigured } from '../firebaseConfig';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { api } from '../services/api';
 
 interface ShopperLoginProps {
   onLogin: (user: User) => void;
-  users: User[];
   onNavigate: (view: AppView) => void;
   lang: Language;
 }
 
-const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, users, onNavigate, lang }) => {
+const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, onNavigate, lang }) => {
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,75 +19,17 @@ const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, users, onNavigate,
     e.preventDefault();
     setIsLoading(true);
 
-    // Remove spacing from phone for matching
-    const cleanPhone = phone.replace(/\s/g, '');
-    
-    // 1. DEMO MODE FALLBACK
-    if (!isConfigured) {
-       console.warn("Firebase not configured. Checking Mock Data.");
-       // Check against passed users prop (which includes new signups in memory)
-       const mockUser = users.find(u => 
-         u.phoneNumber.replace(/\s/g, '').includes(cleanPhone) && 
-         // @ts-ignore - Mock users have 'pin' added in constants but interface might be strict
-         u.pin === pin
-       );
-
-       if (mockUser) {
-         setTimeout(() => {
-           onLogin(mockUser);
-           setIsLoading(false);
-         }, 1000);
-         return;
-       }
-       
-       // Default fallback for hardcoded check if list is empty for some reason
-       if (phone === '811234567' && pin === '1234') {
-          // Find Jean Kabeya as fallback
-          const defaultUser = users[0]; 
-          onLogin(defaultUser);
-          setIsLoading(false);
-          return;
-       }
-    }
-
     try {
-      // 2. REAL FIREBASE LOGIN
-      const usersRef = collection(db, 'users');
-      const q = query(
-        usersRef, 
-        where('phoneNumber', '==', cleanPhone),
-        where('pin', '==', pin)
-      );
+      const response = await api.auth.shopperLogin(phone, pin);
       
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        const userData = userDoc.data() as User;
-        // Ensure ID is passed
-        onLogin({ ...userData, id: userDoc.id });
+      if (response.success && response.user) {
+        onLogin(response.user);
       } else {
-        throw new Error("User not found in DB");
+        alert(response.error || "Login Failed");
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Login error:", error);
-      
-      // Fallback check in users array again in case DB failed but user exists in memory (rare edge case)
-      if (error.code === 'permission-denied' || error.code === 'unavailable' || !isConfigured || error.message.includes("User not found")) {
-         const mockUser = users.find(u => 
-            u.phoneNumber.replace(/\s/g, '').includes(cleanPhone) && 
-            // @ts-ignore
-            u.pin === pin
-         );
-         
-         if (mockUser) {
-           console.log("Found in Memory (Fallback). Logging in.");
-           onLogin(mockUser);
-           return;
-         }
-      }
-      
-      alert("Login Failed: Incorrect Phone Number or PIN.");
+      alert("Login Error. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +49,7 @@ const ShopperLogin: React.FC<ShopperLoginProps> = ({ onLogin, users, onNavigate,
         <div className="p-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {!isConfigured && (
+            {!isLoading && (
                <div className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded mb-2 text-center">
                  Demo Mode Active. Use: <strong>81 123 4567</strong> / <strong>1234</strong>
                </div>
