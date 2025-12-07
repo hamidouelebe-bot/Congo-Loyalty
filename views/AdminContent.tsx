@@ -206,6 +206,38 @@ const AdminContent: React.FC<AdminContentProps> = ({ content, onUpdateContent, l
 
       <div>
         <h3 className="font-bold text-gray-800 mb-4">Footer</h3>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Terms Link Title</label>
+            <input
+              type="text"
+              value={landingData.footerTermsTitle || ''}
+              onChange={(e) => setLandingData({ ...landingData, footerTermsTitle: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              placeholder="Terms"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Privacy Link Title</label>
+            <input
+              type="text"
+              value={landingData.footerPrivacyTitle || ''}
+              onChange={(e) => setLandingData({ ...landingData, footerPrivacyTitle: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              placeholder="Privacy"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Help Link Title</label>
+            <input
+              type="text"
+              value={landingData.footerHelpTitle || ''}
+              onChange={(e) => setLandingData({ ...landingData, footerHelpTitle: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              placeholder="Help"
+            />
+          </div>
+        </div>
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Copyright Text</label>
           <input

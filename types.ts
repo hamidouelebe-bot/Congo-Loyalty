@@ -138,6 +138,10 @@ export interface LandingContent {
   featSecureTitle: string;
   featSecureDesc: string;
   footerCopy: string;
+  // Footer links - editable from CRM
+  footerTermsTitle?: string;
+  footerPrivacyTitle?: string;
+  footerHelpTitle?: string;
 }
 
 export interface AppContent {

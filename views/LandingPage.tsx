@@ -152,7 +152,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, co
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer - Content from CRM */}
       <footer className="bg-gray-900 text-white py-12 border-t border-gray-800">
         <div className="max-w-7xl mx-auto px-6 flex flex-col items-center gap-6">
            <div className="flex items-center gap-2">
@@ -160,9 +160,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, co
               <span className="font-bold text-xl">{content.appName || 'Loyalty'}</span>
            </div>
            <div className="flex gap-6 text-sm text-gray-400">
-              <button onClick={() => onNavigate(AppView.ShopperTerms)} className="hover:text-white">{t.footer_terms}</button>
-              <button onClick={() => onNavigate(AppView.ShopperPrivacy)} className="hover:text-white">{t.footer_privacy}</button>
-              <button onClick={() => onNavigate(AppView.ShopperHelp)} className="hover:text-white">{t.footer_help}</button>
+              <button onClick={() => onNavigate(AppView.ShopperTerms)} className="hover:text-white">
+                {content.footerTermsTitle || t.footer_terms}
+              </button>
+              <button onClick={() => onNavigate(AppView.ShopperPrivacy)} className="hover:text-white">
+                {content.footerPrivacyTitle || t.footer_privacy}
+              </button>
+              <button onClick={() => onNavigate(AppView.ShopperHelp)} className="hover:text-white">
+                {content.footerHelpTitle || t.footer_help}
+              </button>
            </div>
            <p className="text-gray-500 text-sm mt-4">{content.footerCopy}</p>
         </div>

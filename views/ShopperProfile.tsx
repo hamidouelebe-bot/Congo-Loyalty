@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AppView, Language, User } from '../types';
 import { IconHome, IconGift, IconCamera, IconUserCircle } from '../components/Icons';
+import { api } from '../services/api';
 
 interface ShopperProfileProps {
   onNavigate: (view: AppView) => void;
@@ -19,11 +20,53 @@ const ShopperProfile: React.FC<ShopperProfileProps> = ({ onNavigate, onLogout, l
   });
 
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Change PIN state
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [pinData, setPinData] = useState({ currentPin: '', newPin: '', confirmPin: '' });
+  const [pinError, setPinError] = useState('');
+  const [pinSuccess, setPinSuccess] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsEditing(false);
     alert('Profil mis à jour avec succès');
+  };
+
+  const handleChangePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError('');
+    setPinSuccess('');
+    
+    if (pinData.newPin !== pinData.confirmPin) {
+      setPinError(lang === 'fr' ? 'Les nouveaux codes PIN ne correspondent pas' : 'New PINs do not match');
+      return;
+    }
+    
+    if (pinData.newPin.length !== 4 || !/^\d{4}$/.test(pinData.newPin)) {
+      setPinError(lang === 'fr' ? 'Le code PIN doit être composé de 4 chiffres' : 'PIN must be 4 digits');
+      return;
+    }
+
+    setIsChangingPin(true);
+    try {
+      const result = await api.auth.shopperChangePin(user.id, pinData.currentPin, pinData.newPin);
+      if (result.success) {
+        setPinSuccess(lang === 'fr' ? 'Code PIN modifié avec succès!' : 'PIN changed successfully!');
+        setPinData({ currentPin: '', newPin: '', confirmPin: '' });
+        setTimeout(() => {
+          setShowChangePinModal(false);
+          setPinSuccess('');
+        }, 2000);
+      } else {
+        setPinError(result.error || (lang === 'fr' ? 'Erreur lors du changement du PIN' : 'Failed to change PIN'));
+      }
+    } catch (error) {
+      setPinError(lang === 'fr' ? 'Erreur de connexion' : 'Connection error');
+    } finally {
+      setIsChangingPin(false);
+    }
   };
 
   return (
@@ -117,12 +160,40 @@ const ShopperProfile: React.FC<ShopperProfileProps> = ({ onNavigate, onLogout, l
            )}
         </form>
 
+        {/* Change PIN Section */}
+        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <h3 className="font-bold text-gray-800 text-sm mb-3">
+            {lang === 'fr' ? 'Sécurité' : 'Security'}
+          </h3>
+          <button 
+            onClick={() => setShowChangePinModal(true)}
+            className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-gray-900">
+                  {lang === 'fr' ? 'Changer le code PIN' : 'Change PIN Code'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {lang === 'fr' ? 'Modifier votre code de connexion' : 'Update your login code'}
+                </p>
+              </div>
+            </div>
+            <span className="text-gray-400">→</span>
+          </button>
+        </div>
+
         <div className="mt-6 space-y-2">
            <button 
              onClick={() => onNavigate(AppView.ShopperHelp)}
              className="w-full bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center text-gray-700 text-sm font-medium hover:bg-gray-50"
            >
-              <span>Aide & Support</span>
+              <span>{lang === 'fr' ? 'Aide & Support' : 'Help & Support'}</span>
               <span className="text-gray-400">→</span>
            </button>
            <button 
@@ -169,6 +240,113 @@ const ShopperProfile: React.FC<ShopperProfileProps> = ({ onNavigate, onLogout, l
            <span className="text-[10px] font-medium">Profil</span>
         </button>
       </div>
+
+      {/* Change PIN Modal */}
+      {showChangePinModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-gray-900">
+                  {lang === 'fr' ? '🔐 Changer le code PIN' : '🔐 Change PIN Code'}
+                </h3>
+                <button 
+                  onClick={() => { setShowChangePinModal(false); setPinError(''); setPinSuccess(''); setPinData({ currentPin: '', newPin: '', confirmPin: '' }); }}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <form onSubmit={handleChangePin} className="p-6 space-y-4">
+              {pinError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {pinError}
+                </div>
+              )}
+              {pinSuccess && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {pinSuccess}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                  {lang === 'fr' ? 'Code PIN Actuel' : 'Current PIN'}
+                </label>
+                <input 
+                  type="password" 
+                  maxLength={4}
+                  pattern="\d{4}"
+                  required
+                  value={pinData.currentPin}
+                  onChange={(e) => setPinData({ ...pinData, currentPin: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center tracking-widest font-bold text-lg"
+                  placeholder="••••"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                  {lang === 'fr' ? 'Nouveau Code PIN' : 'New PIN'}
+                </label>
+                <input 
+                  type="password" 
+                  maxLength={4}
+                  pattern="\d{4}"
+                  required
+                  value={pinData.newPin}
+                  onChange={(e) => setPinData({ ...pinData, newPin: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center tracking-widest font-bold text-lg"
+                  placeholder="••••"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                  {lang === 'fr' ? 'Confirmer le Nouveau PIN' : 'Confirm New PIN'}
+                </label>
+                <input 
+                  type="password" 
+                  maxLength={4}
+                  pattern="\d{4}"
+                  required
+                  value={pinData.confirmPin}
+                  onChange={(e) => setPinData({ ...pinData, confirmPin: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center tracking-widest font-bold text-lg"
+                  placeholder="••••"
+                />
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => { setShowChangePinModal(false); setPinError(''); setPinData({ currentPin: '', newPin: '', confirmPin: '' }); }}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                >
+                  {lang === 'fr' ? 'Annuler' : 'Cancel'}
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isChangingPin}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {isChangingPin 
+                    ? (lang === 'fr' ? 'Modification...' : 'Changing...') 
+                    : (lang === 'fr' ? 'Modifier' : 'Change PIN')
+                  }
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

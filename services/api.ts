@@ -56,6 +56,30 @@ export const api = {
       });
       return res.json();
     },
+    shopperChangePin: async (userId: string, currentPin: string, newPin: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+      const res = await fetch(`${API_PREFIX}/auth/shopper/change-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, currentPin, newPin })
+      });
+      return res.json();
+    },
+    shopperForgotPin: async (phone: string): Promise<{ success: boolean; message?: string; email?: string; error?: string }> => {
+      const res = await fetch(`${API_PREFIX}/auth/shopper/forgot-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      return res.json();
+    },
+    shopperResetPin: async (phone: string, code: string, newPin: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+      const res = await fetch(`${API_PREFIX}/auth/shopper/reset-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code, newPin })
+      });
+      return res.json();
+    },
     adminLogin: async (email: string, password: string): Promise<{ success: boolean; user?: any; error?: string }> => {
       const res = await fetch(`${API_PREFIX}/auth/admin/login`, {
         method: 'POST',

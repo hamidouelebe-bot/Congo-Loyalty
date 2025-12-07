@@ -679,6 +679,124 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true, user: result.rows[0] });
     }
 
+    // ============ SHOPPER CHANGE PIN ============
+    if (path === '/auth/shopper/change-pin' && method === 'POST') {
+      const { userId, currentPin, newPin } = req.body;
+      
+      if (!userId || !currentPin || !newPin) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+      
+      if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+        return res.status(400).json({ success: false, error: 'PIN must be 4 digits' });
+      }
+
+      const result = await pool.query('SELECT pin FROM users WHERE id = $1', [userId]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      const user = result.rows[0];
+      const isValidPin = user.pin.startsWith('$2') 
+        ? await bcrypt.compare(currentPin, user.pin)
+        : user.pin === currentPin;
+      
+      if (!isValidPin) {
+        return res.status(401).json({ success: false, error: 'Current PIN is incorrect' });
+      }
+
+      const hashedNewPin = await bcrypt.hash(newPin, 10);
+      await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [hashedNewPin, userId]);
+      
+      return res.json({ success: true, message: 'PIN changed successfully' });
+    }
+
+    // ============ SHOPPER FORGOT PIN - Send Reset Code ============
+    if (path === '/auth/shopper/forgot-pin' && method === 'POST') {
+      const { phone } = req.body;
+      const cleanPhone = phone.replace(/\s/g, '');
+      
+      if (!cleanPhone) {
+        return res.status(400).json({ success: false, error: 'Phone number is required' });
+      }
+
+      const result = await pool.query('SELECT id, email, first_name FROM users WHERE phone_number = $1', [cleanPhone]);
+      
+      if (result.rows.length === 0) {
+        // Don't reveal if phone exists for security
+        return res.json({ success: true, message: 'If this phone is registered, a reset code will be sent.' });
+      }
+
+      const user = result.rows[0];
+      
+      if (!user.email) {
+        return res.status(400).json({ success: false, error: 'No email associated with this account. Contact support.' });
+      }
+
+      // Generate reset code
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store reset code with expiry
+      await pool.query(`
+        INSERT INTO email_verifications (email, code, expires_at)
+        VALUES ($1, $2, NOW() + INTERVAL '15 minutes')
+        ON CONFLICT (email) 
+        DO UPDATE SET code = $2, expires_at = NOW() + INTERVAL '15 minutes'
+      `, [user.email, resetCode]);
+
+      // Send email with reset code
+      await sendOtpEmail(user.email, resetCode);
+      
+      return res.json({ 
+        success: true, 
+        message: 'Reset code sent to your email',
+        email: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3') // Mask email
+      });
+    }
+
+    // ============ SHOPPER RESET PIN ============
+    if (path === '/auth/shopper/reset-pin' && method === 'POST') {
+      const { phone, code, newPin } = req.body;
+      const cleanPhone = phone.replace(/\s/g, '');
+      
+      if (!cleanPhone || !code || !newPin) {
+        return res.status(400).json({ success: false, error: 'Phone, code, and new PIN are required' });
+      }
+      
+      if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+        return res.status(400).json({ success: false, error: 'PIN must be 4 digits' });
+      }
+
+      // Get user email
+      const userResult = await pool.query('SELECT id, email FROM users WHERE phone_number = $1', [cleanPhone]);
+      
+      if (userResult.rows.length === 0) {
+        return res.status(400).json({ success: false, error: 'Invalid phone number' });
+      }
+
+      const user = userResult.rows[0];
+
+      // Verify code
+      const codeResult = await pool.query(
+        'SELECT * FROM email_verifications WHERE email = $1 AND code = $2 AND expires_at > NOW()',
+        [user.email, code]
+      );
+
+      if (codeResult.rows.length === 0) {
+        return res.status(400).json({ success: false, error: 'Invalid or expired reset code' });
+      }
+
+      // Update PIN
+      const hashedNewPin = await bcrypt.hash(newPin, 10);
+      await pool.query('UPDATE users SET pin = $1 WHERE id = $2', [hashedNewPin, user.id]);
+      
+      // Delete used code
+      await pool.query('DELETE FROM email_verifications WHERE email = $1', [user.email]);
+      
+      return res.json({ success: true, message: 'PIN reset successfully. You can now login.' });
+    }
+
     if (path === '/auth/partner/login' && method === 'POST') {
       const { email, password } = req.body;
       
