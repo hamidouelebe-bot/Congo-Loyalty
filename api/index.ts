@@ -967,7 +967,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             await client.query(`
                 INSERT INTO notifications (user_id, title, message, type, date)
-                VALUES ($1, 'Points Earned!', $2, 'success', NOW())
+                VALUES ($1, 'Points Earned!', $2, 'reward', NOW())
             `, [userId, `You earned ${pointsAwarded} points from your receipt at ${supermarketName}.`]);
             
             if (campaignApplied) {
@@ -977,7 +977,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
              // Notify pending
              await client.query(`
                 INSERT INTO notifications (user_id, title, message, type, date)
-                VALUES ($1, 'Receipt Submitted', $2, 'info', NOW())
+                VALUES ($1, 'Receipt Submitted', $2, 'system', NOW())
             `, [userId, `Your receipt from ${supermarketName} has been submitted for review.`]);
         }
 
