@@ -276,7 +276,7 @@ const App: React.FC = () => {
     
     switch (currentView) {
       case AppView.ShopperDashboard: return <ShopperDashboard user={shopperUser} notifications={notifications} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
-      case AppView.ShopperScan: return <ShopperScan onNavigate={setCurrentView} lang={lang} />;
+      case AppView.ShopperScan: return <ShopperScan onNavigate={setCurrentView} lang={lang} user={shopperUser} />;
       case AppView.ShopperRewards: return <ShopperRewards user={shopperUser} onNavigate={setCurrentView} lang={lang} onUpdateUser={updateShopperUser} />;
       case AppView.ShopperActivity: return <ShopperActivity onNavigate={setCurrentView} lang={lang} />;
       case AppView.ShopperProfile: return <ShopperProfile user={shopperUser} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;

@@ -234,6 +234,21 @@ export const api = {
       });
       if (!res.ok) throw new Error('Failed to update receipt status');
     },
+    process: async (userId: string, scannedData: any, imageUrl?: string): Promise<{ success: boolean; points: number; status: string; receiptId: string; campaign?: string }> => {
+      const res = await fetch(`${API_PREFIX}/receipts/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, scannedData, imageUrl })
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        // Propagate error code if available
+        const errObj = new Error(error.error || 'Failed to process receipt');
+        (errObj as any).code = error.code;
+        throw errObj;
+      }
+      return res.json();
+    },
     delete: async (id: string): Promise<void> => {
       const res = await fetch(`${API_PREFIX}/receipts/${id}`, {
         method: 'DELETE'

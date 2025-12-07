@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AppView, Language } from '../types';
+import { AppView, Language, User } from '../types';
 import { IconCamera } from '../components/Icons';
 import { analyzeReceiptImage, ScannedReceiptData } from '../services/geminiService';
+import { api } from '../services/api';
 
 interface ShopperScanProps {
   onNavigate: (view: AppView) => void;
   lang: Language;
+  user: User;
 }
 
-const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang }) => {
+const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => {
   // State
   const [image, setImage] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -119,10 +121,34 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang }) => {
     }
   };
 
-  const handleConfirm = () => {
-    // In a real app, save 'scannedData' to Firestore here
-    alert("Reçu validé et envoyé !");
-    onNavigate(AppView.ShopperDashboard);
+  const handleConfirm = async () => {
+    if (!scannedData || !image) return;
+    
+    try {
+      setIsProcessing(true);
+      // Use the extracted data and image (base64) to process
+      const result = await api.receipts.process(user.id, scannedData, image);
+      
+      if (result.success) {
+         let msg = `Reçu validé !`;
+         if (result.points > 0) {
+            msg = `Succès ! Vous avez gagné ${result.points} points !${result.campaign ? ` (Campagne: ${result.campaign})` : ''}`;
+         } else {
+            msg += ` En attente de validation.`;
+         }
+         alert(msg);
+         onNavigate(AppView.ShopperDashboard);
+      }
+    } catch (e: any) {
+       console.error("Scan processing error:", e);
+       if (e.code === 'DUPLICATE_RECEIPT') {
+          alert("Ce reçu a déjà été scanné !");
+       } else {
+          alert("Erreur lors du traitement: " + (e.message || "Erreur inconnue"));
+       }
+    } finally {
+       setIsProcessing(false);
+    }
   };
 
   const triggerFileInput = () => {

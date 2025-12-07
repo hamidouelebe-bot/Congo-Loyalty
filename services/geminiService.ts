@@ -51,6 +51,7 @@ export interface ScannedReceiptData {
   date: string;
   items: Array<{ name: string; price: number; quantity: number }>;
   confidence: number;
+  receiptNumber?: string;
 }
 
 export const analyzeReceiptImage = async (base64Image: string): Promise<ScannedReceiptData | null> => {
@@ -73,6 +74,7 @@ export const analyzeReceiptImage = async (base64Image: string): Promise<ScannedR
       "totalAmount": 0, (number)
       "currency": "CDF" or "USD",
       "date": "YYYY-MM-DD",
+      "receiptNumber": "Unique receipt ID/Invoice number found on receipt",
       "items": [ {"name": "item name", "price": 0, "quantity": 1} ],
       "confidence": 0.0 to 1.0 (how readable is it?)
     }

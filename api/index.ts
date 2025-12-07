@@ -197,9 +197,15 @@ const initDb = async () => {
         date TIMESTAMP DEFAULT NOW(),
         status VARCHAR(50) DEFAULT 'pending',
         confidence_score DECIMAL,
-        image_url VARCHAR(500)
+        image_url VARCHAR(500),
+        receipt_number VARCHAR(255)
       );
     `);
+    
+    // Ensure column exists (migration)
+    try {
+      await pool.query('ALTER TABLE receipts ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(255)');
+    } catch (e) { /* ignore */ }
 
     // Receipt items table
     await pool.query(`
@@ -858,6 +864,132 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
       return res.json({ success: true, newBalance: result.rows[0].pointsBalance });
+    }
+
+    // ============ RECEIPT PROCESSING ============
+    if (path === '/receipts/process' && method === 'POST') {
+      const { userId, scannedData, imageUrl } = req.body;
+      const { merchantName, totalAmount, date, receiptNumber, items, confidence } = scannedData;
+
+      if (!userId || !merchantName || !totalAmount) {
+         return res.status(400).json({ error: 'Missing required data' });
+      }
+
+      // 1. Duplicate Check
+      if (receiptNumber) {
+        const duplicate = await pool.query('SELECT id FROM receipts WHERE receipt_number = $1', [receiptNumber]);
+        if (duplicate.rows.length > 0) {
+          return res.status(400).json({ error: 'Receipt already processed', code: 'DUPLICATE_RECEIPT' });
+        }
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // 2. Find Partner/Supermarket
+        // Match if DB name is contained in Merchant Name (e.g. DB "Shoprite" in "Shoprite Kinshasa")
+        const marketRes = await client.query('SELECT id, name FROM supermarkets WHERE $1 ILIKE \'%\' || name || \'%\' LIMIT 1', [merchantName]);
+        
+        let supermarketId = null;
+        let supermarketName = merchantName;
+
+        if (marketRes.rows.length > 0) {
+          supermarketId = marketRes.rows[0].id;
+          supermarketName = marketRes.rows[0].name;
+        }
+
+        // 3. Check Active Campaigns
+        let pointsAwarded = 0;
+        let campaignApplied = null;
+
+        if (supermarketId) {
+            const campaigns = await client.query(`
+                SELECT c.* FROM campaigns c
+                JOIN campaign_supermarkets cs ON c.id = cs.campaign_id
+                WHERE cs.supermarket_id = $1 
+                AND c.status = 'active'
+                AND (c.end_date IS NULL OR c.end_date >= CURRENT_DATE)
+                AND (c.min_spend IS NULL OR c.min_spend <= $2)
+            `, [supermarketId, totalAmount]);
+
+            if (campaigns.rows.length > 0) {
+                campaignApplied = campaigns.rows[0];
+                
+                // Standard Rule: 1 point per 1000 currency units
+                const basePoints = Math.floor(totalAmount / 1000);
+                
+                // Bonus from campaign
+                let bonusPoints = 0;
+                // Check if reward value is numeric points
+                if (campaignApplied.reward_type === 'points' && campaignApplied.reward_value) {
+                   // If it's a flat bonus (e.g. "50")
+                   if (!isNaN(parseInt(campaignApplied.reward_value))) {
+                      bonusPoints = parseInt(campaignApplied.reward_value);
+                   }
+                }
+                
+                pointsAwarded = basePoints + bonusPoints;
+            }
+        }
+
+        // 4. Insert Receipt
+        const rId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        const status = pointsAwarded > 0 ? 'approved' : 'pending'; // Auto-approve if points earned via campaign
+
+        await client.query(`
+            INSERT INTO receipts (id, user_id, supermarket_name, amount, date, status, confidence_score, image_url, receipt_number)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [rId, userId, supermarketName, totalAmount, date || new Date(), status, confidence, imageUrl || '', receiptNumber || null]);
+
+        // Items
+        if (items && items.length > 0) {
+            for (const item of items) {
+                // Skip if missing name or price
+                if (item.name && item.price) {
+                  await client.query(`
+                      INSERT INTO receipt_items (receipt_id, name, quantity, unit_price, total, category)
+                      VALUES ($1, $2, $3, $4, $5, 'General')
+                  `, [rId, item.name, item.quantity || 1, item.price, (item.price * (item.quantity || 1))]);
+                }
+            }
+        }
+
+        // 5. Update User & Activities if approved
+        if (status === 'approved' && pointsAwarded > 0) {
+            await client.query('UPDATE users SET points_balance = points_balance + $1 WHERE id = $2', [pointsAwarded, userId]);
+            
+            await client.query(`
+                INSERT INTO activities (user_id, type, description, points, date)
+                VALUES ($1, 'earn', $2, $3, NOW())
+            `, [userId, `Earned points at ${supermarketName} (${campaignApplied ? campaignApplied.name : 'Standard'})`, pointsAwarded]);
+
+            await client.query(`
+                INSERT INTO notifications (user_id, title, message, type, date)
+                VALUES ($1, 'Points Earned!', $2, 'success', NOW())
+            `, [userId, `You earned ${pointsAwarded} points from your receipt at ${supermarketName}.`]);
+            
+            if (campaignApplied) {
+                 await client.query('UPDATE campaigns SET conversions = conversions + 1 WHERE id = $1', [campaignApplied.id]);
+            }
+        } else {
+             // Notify pending
+             await client.query(`
+                INSERT INTO notifications (user_id, title, message, type, date)
+                VALUES ($1, 'Receipt Submitted', $2, 'info', NOW())
+            `, [userId, `Your receipt from ${supermarketName} has been submitted for review.`]);
+        }
+
+        await client.query('COMMIT');
+        return res.json({ success: true, points: pointsAwarded, status, receiptId: rId, campaign: campaignApplied?.name });
+
+      } catch (e: any) {
+          await client.query('ROLLBACK');
+          console.error("Processing Error", e);
+          return res.status(500).json({ error: e.message });
+      } finally {
+          client.release();
+      }
     }
 
     // ============ RECEIPTS ============
