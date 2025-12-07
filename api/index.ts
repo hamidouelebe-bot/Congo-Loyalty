@@ -1354,7 +1354,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // Notify user
           await client.query(`
             INSERT INTO notifications (user_id, title, message, type, date, read)
-            VALUES ($1, 'Receipt Approved', $2, 'success', NOW(), false)
+            VALUES ($1, 'Receipt Approved', $2, 'reward', NOW(), false)
           `, [userId, `Your receipt has been approved! You earned ${points} points.`]);
 
           // Record Activity
@@ -1369,7 +1369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const userId = updateRes.rows[0].user_id;
           await client.query(`
             INSERT INTO notifications (user_id, title, message, type, date, read)
-            VALUES ($1, 'Receipt Rejected', 'Your receipt could not be verified. Please try again.', 'error', NOW(), false)
+            VALUES ($1, 'Receipt Rejected', 'Your receipt could not be verified. Please try again.', 'system', NOW(), false)
           `, [userId]);
         }
 
