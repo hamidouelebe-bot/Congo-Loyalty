@@ -1323,7 +1323,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ============ RECEIPT ACTIONS ============
     if (path.match(/^\/receipts\/[\w-]+\/status$/) && method === 'PUT') {
       const id = path.split('/')[2];
-      const { status, points } = req.body;
+      let { status, points } = req.body;
+      
+      // Map 'verified' to 'approved' for frontend compatibility
+      if (status === 'verified') {
+        status = 'approved';
+      }
       
       if (!['approved', 'rejected', 'pending'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
