@@ -253,6 +253,16 @@ const App: React.FC = () => {
     if (currentView === AppView.ShopperSignup) {
       return <ShopperSignup onLogin={handleShopperLogin} onNavigate={setCurrentView} lang={lang} />;
     }
+    // Static Pages - accessible without login
+    if (currentView === AppView.ShopperHelp) {
+      return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.help} lang={lang} isLoggedIn={false} />;
+    }
+    if (currentView === AppView.ShopperPrivacy) {
+      return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.privacy} lang={lang} isLoggedIn={false} />;
+    }
+    if (currentView === AppView.ShopperTerms) {
+      return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.terms} lang={lang} isLoggedIn={false} />;
+    }
     // Default to Landing Page
     return <LandingPage onNavigate={setCurrentView} lang={lang} setLang={setLang} content={appContent.landing} />;
   }
@@ -281,10 +291,10 @@ const App: React.FC = () => {
       case AppView.ShopperActivity: return <ShopperActivity onNavigate={setCurrentView} lang={lang} />;
       case AppView.ShopperProfile: return <ShopperProfile user={shopperUser} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
       case AppView.ShopperNotifications: return <ShopperNotifications notifications={notifications} onNavigate={setCurrentView} lang={lang} />;
-      // Static Pages
-      case AppView.ShopperHelp: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.help} lang={lang} />;
-      case AppView.ShopperPrivacy: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.privacy} lang={lang} />;
-      case AppView.ShopperTerms: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.terms} lang={lang} />;
+      // Static Pages (logged in)
+      case AppView.ShopperHelp: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.help} lang={lang} isLoggedIn={true} />;
+      case AppView.ShopperPrivacy: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.privacy} lang={lang} isLoggedIn={true} />;
+      case AppView.ShopperTerms: return <ShopperStaticPage onNavigate={setCurrentView} pageData={appContent.terms} lang={lang} isLoggedIn={true} />;
       default: return <ShopperDashboard user={shopperUser} notifications={notifications} onNavigate={setCurrentView} onLogout={handleLogout} lang={lang} />;
     }
   }
