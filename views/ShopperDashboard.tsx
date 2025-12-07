@@ -5,6 +5,20 @@ import { TRANSLATIONS } from '../constants';
 import { IconCamera, IconGift, IconHome, IconUserCircle, IconBell } from '../components/Icons';
 import { api } from '../services/api';
 
+// Type for active promotions
+interface ActivePromotion {
+  id: string;
+  name: string;
+  brand: string;
+  mechanic: string;
+  minSpend: number | null;
+  rewardType: string;
+  rewardValue: string;
+  startDate: string;
+  endDate: string;
+  supermarkets: { id: string; name: string; logoUrl: string }[];
+}
+
 interface ShopperDashboardProps {
   onNavigate: (view: AppView) => void;
   onLogout: () => void;
@@ -16,18 +30,26 @@ interface ShopperDashboardProps {
 const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogout, lang, user, notifications }) => {
   const t = TRANSLATIONS[lang].shopper;
   const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
+  const [promotions, setPromotions] = useState<ActivePromotion[]>([]);
+  const [isLoadingPromos, setIsLoadingPromos] = useState(true);
   
   useEffect(() => {
-    const fetchReceipts = async () => {
+    const fetchData = async () => {
       try {
-        const data = await api.receipts.getByUserId(user.id);
-        // Take top 3
-        setRecentReceipts(data.slice(0, 3));
+        // Fetch receipts and promotions in parallel
+        const [receiptsData, promosData] = await Promise.all([
+          api.receipts.getByUserId(user.id),
+          api.promotions.getActive()
+        ]);
+        setRecentReceipts(receiptsData.slice(0, 3));
+        setPromotions(promosData);
       } catch (error) {
-        console.error("Failed to fetch receipts:", error);
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setIsLoadingPromos(false);
       }
     };
-    fetchReceipts();
+    fetchData();
   }, [user.id]);
   
   // Check for unread notifications
@@ -145,20 +167,81 @@ const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogou
           </div>
         </div>
 
-        {/* Offers Banner */}
+        {/* Active Promotions - Pour Vous */}
         <div className="mt-8 mb-4">
            <h3 className="font-bold text-gray-800 mb-4">{t.for_you}</h3>
-           <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden">
-              <div className="relative z-10">
-                <p className="text-xs font-bold text-purple-200 uppercase tracking-wider mb-1">{t.exclusive}</p>
-                <h4 className="font-bold text-lg mb-2">{t.offer_title}</h4>
-                <p className="text-xs text-purple-100 opacity-90 mb-3">{t.offer_desc}</p>
-                <button className="bg-white text-purple-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm">{t.view_offer}</button>
-              </div>
-              <div className="absolute right-0 bottom-0 opacity-20 transform translate-x-2 translate-y-2">
-                 <svg width="100" height="100" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-              </div>
-           </div>
+           
+           {isLoadingPromos ? (
+             <div className="flex justify-center py-6">
+               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+             </div>
+           ) : promotions.length === 0 ? (
+             <div className="bg-gray-100 rounded-xl p-6 text-center">
+               <div className="text-3xl mb-2">📢</div>
+               <p className="text-gray-500 text-sm">
+                 {lang === 'fr' ? 'Aucune promotion active pour le moment' : 'No active promotions right now'}
+               </p>
+             </div>
+           ) : (
+             <div className="space-y-3">
+               {promotions.slice(0, 3).map((promo) => (
+                 <div 
+                   key={promo.id}
+                   className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden"
+                 >
+                   <div className="relative z-10">
+                     <div className="flex justify-between items-start mb-2">
+                       <p className="text-xs font-bold text-purple-200 uppercase tracking-wider">{promo.brand}</p>
+                       {promo.rewardType === 'points' && (
+                         <span className="bg-white/20 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                           ⭐ +{promo.rewardValue} pts
+                         </span>
+                       )}
+                     </div>
+                     <h4 className="font-bold text-lg mb-1">{promo.name}</h4>
+                     <p className="text-xs text-purple-100 opacity-90 mb-3 line-clamp-2">{promo.mechanic}</p>
+                     <div className="flex justify-between items-center">
+                       <div className="text-xs text-purple-200">
+                         {promo.minSpend && (
+                           <span>{lang === 'fr' ? 'Min:' : 'Min:'} {promo.minSpend.toLocaleString()} CDF</span>
+                         )}
+                       </div>
+                       <button 
+                         onClick={() => onNavigate(AppView.ShopperScan)}
+                         className="bg-white text-purple-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm hover:bg-purple-50 transition-colors"
+                       >
+                         {lang === 'fr' ? 'Scanner' : 'Scan Now'}
+                       </button>
+                     </div>
+                     {/* Participating stores */}
+                     {promo.supermarkets.length > 0 && (
+                       <div className="mt-3 pt-3 border-t border-white/20">
+                         <p className="text-[10px] text-purple-200 mb-1">{lang === 'fr' ? 'Chez:' : 'At:'}</p>
+                         <div className="flex flex-wrap gap-1">
+                           {promo.supermarkets.slice(0, 2).map(s => (
+                             <span key={s.id} className="bg-white/10 text-white text-[10px] px-2 py-0.5 rounded">
+                               {s.name}
+                             </span>
+                           ))}
+                           {promo.supermarkets.length > 2 && (
+                             <span className="text-purple-200 text-[10px]">+{promo.supermarkets.length - 2}</span>
+                           )}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                   <div className="absolute right-0 bottom-0 opacity-20 transform translate-x-2 translate-y-2">
+                     <svg width="80" height="80" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                   </div>
+                 </div>
+               ))}
+               {promotions.length > 3 && (
+                 <p className="text-center text-sm text-gray-500">
+                   +{promotions.length - 3} {lang === 'fr' ? 'autres promotions' : 'more promotions'}
+                 </p>
+               )}
+             </div>
+           )}
         </div>
       </div>
 
