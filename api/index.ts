@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
 import { put } from '@vercel/blob';
 import { GoogleGenAI } from "@google/genai";
+import { randomUUID } from 'crypto';
 
 // Database connection
 const getDatabaseUrl = () => {
@@ -190,7 +191,7 @@ const initDb = async () => {
     // Receipts table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS receipts (
-        id VARCHAR(50) PRIMARY KEY,
+        id UUID PRIMARY KEY,
         user_id UUID REFERENCES users(id),
         supermarket_name VARCHAR(255),
         amount DECIMAL,
@@ -934,7 +935,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 4. Insert Receipt
-        const rId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        const rId = randomUUID();
         const status = pointsAwarded > 0 ? 'approved' : 'pending'; // Auto-approve if points earned via campaign
 
         await client.query(`
