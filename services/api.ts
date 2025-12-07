@@ -287,6 +287,25 @@ export const api = {
       if (!res.ok) throw new Error('Failed to delete supermarket');
     }
   },
+  // Active promotions for shoppers (public)
+  promotions: {
+    getActive: async (): Promise<{
+      id: string;
+      name: string;
+      brand: string;
+      mechanic: string;
+      minSpend: number | null;
+      rewardType: string;
+      rewardValue: string;
+      startDate: string;
+      endDate: string;
+      supermarkets: { id: string; name: string; logoUrl: string }[];
+    }[]> => {
+      const res = await fetch(`${API_PREFIX}/promotions/active`);
+      if (!res.ok) throw new Error('Failed to fetch active promotions');
+      return res.json();
+    }
+  },
   campaigns: {
     getAll: async (): Promise<Campaign[]> => {
       const res = await fetch(`${API_PREFIX}/campaigns`);

@@ -1051,41 +1051,83 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ============ ALL CHECKS PASSED - PROCESS RECEIPT ============
-        console.log(`[RECEIPT] Processing valid receipt for user ${userId}: ${supermarketName}, ${totalAmount}`);
+        console.log(`[RECEIPT] Processing receipt for user ${userId}: ${supermarketName}, ${totalAmount}`);
 
-        // Check Active Campaigns
+        // ============ CAMPAIGN & ELIGIBILITY CHECK ============
         let pointsAwarded = 0;
         let campaignApplied = null;
+        let eligibilityStatus: 'eligible' | 'no_partner' | 'no_campaign' | 'below_minimum' = 'no_partner';
+        let eligibilityMessage = '';
 
-        if (supermarketId) {
+        // STEP 1: Check if supermarket is a registered partner
+        if (!supermarketId) {
+            // Supermarket not found in our partner network
+            eligibilityStatus = 'no_partner';
+            eligibilityMessage = `"${merchantName}" is not a registered partner store. Your receipt has been saved but no points can be earned at this location.`;
+            console.log(`[RECEIPT] Store not in partner network: ${merchantName}`);
+        } else {
+            // STEP 2: Check for active campaigns at this supermarket
             const campaigns = await client.query(`
-                SELECT c.* FROM campaigns c
+                SELECT c.*, 
+                       to_char(c.start_date, 'YYYY-MM-DD') as start_date_str,
+                       to_char(c.end_date, 'YYYY-MM-DD') as end_date_str
+                FROM campaigns c
                 JOIN campaign_supermarkets cs ON c.id = cs.campaign_id
                 WHERE cs.supermarket_id = $1 
                 AND c.status = 'active'
+                AND c.start_date <= CURRENT_DATE
                 AND (c.end_date IS NULL OR c.end_date >= CURRENT_DATE)
-                AND (c.min_spend IS NULL OR c.min_spend <= $2)
-            `, [supermarketId, totalAmount]);
+                ORDER BY c.reward_value DESC
+            `, [supermarketId]);
 
-            if (campaigns.rows.length > 0) {
-                campaignApplied = campaigns.rows[0];
-                
-                // Standard Rule: 1 point per 1000 currency units
-                const basePoints = Math.floor(totalAmount / 1000);
-                
-                // Bonus from campaign
-                let bonusPoints = 0;
-                if (campaignApplied.reward_type === 'points' && campaignApplied.reward_value) {
-                   if (!isNaN(parseInt(campaignApplied.reward_value))) {
-                      bonusPoints = parseInt(campaignApplied.reward_value);
-                   }
+            if (campaigns.rows.length === 0) {
+                // Store is partner but no active campaign
+                eligibilityStatus = 'no_campaign';
+                eligibilityMessage = `${supermarketName} is a partner store, but there are no active loyalty programs at this time. Your receipt has been saved for future reference.`;
+                console.log(`[RECEIPT] No active campaign for partner: ${supermarketName}`);
+            } else {
+                // STEP 3: Find best matching campaign (check minimum spend)
+                const eligibleCampaigns = campaigns.rows.filter(c => 
+                    !c.min_spend || totalAmount >= parseFloat(c.min_spend)
+                );
+
+                if (eligibleCampaigns.length === 0) {
+                    // Has campaigns but doesn't meet minimum spend
+                    const lowestMinSpend = Math.min(...campaigns.rows.map(c => parseFloat(c.min_spend || 0)));
+                    eligibilityStatus = 'below_minimum';
+                    eligibilityMessage = `Your purchase of ${totalAmount} CDF is below the minimum spend of ${lowestMinSpend} CDF required for the current promotion at ${supermarketName}.`;
+                    console.log(`[RECEIPT] Below minimum spend: ${totalAmount} < ${lowestMinSpend}`);
+                } else {
+                    // STEP 4: Apply the best campaign
+                    campaignApplied = eligibleCampaigns[0];
+                    eligibilityStatus = 'eligible';
+                    
+                    // Check if campaign has reached max redemptions
+                    if (campaignApplied.max_redemptions && campaignApplied.conversions >= campaignApplied.max_redemptions) {
+                        eligibilityStatus = 'no_campaign';
+                        eligibilityMessage = `The promotion "${campaignApplied.name}" has reached its maximum redemptions. Your receipt has been saved.`;
+                        campaignApplied = null;
+                    } else {
+                        // Calculate points
+                        const basePoints = Math.floor(totalAmount / 1000); // 1 point per 1000 CDF
+                        let bonusPoints = 0;
+                        
+                        if (campaignApplied.reward_type === 'points' && campaignApplied.reward_value) {
+                            const rewardVal = parseInt(campaignApplied.reward_value);
+                            if (!isNaN(rewardVal)) {
+                                bonusPoints = rewardVal;
+                            }
+                        }
+                        
+                        pointsAwarded = basePoints + bonusPoints;
+                        eligibilityMessage = `Congratulations! You earned ${pointsAwarded} points (${basePoints} base + ${bonusPoints} bonus) from "${campaignApplied.name}"!`;
+                        console.log(`[RECEIPT] Campaign applied: ${campaignApplied.name}, Points: ${pointsAwarded}`);
+                    }
                 }
-                
-                pointsAwarded = basePoints + bonusPoints;
             }
         }
 
-        // Insert Receipt with image hash
+        // ============ SAVE RECEIPT ============
         const rId = randomUUID();
         const status = pointsAwarded > 0 ? 'verified' : 'pending';
 
@@ -1094,46 +1136,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
         `, [rId, userId, supermarketName, totalAmount, receiptDate, status, confidence, imageUrl || '', cleanReceiptNumber, imageHash]);
 
-        // Items
+        // Save receipt items
         if (items && items.length > 0) {
             for (const item of items) {
-                // Skip if missing name or price
                 if (item.name && item.price) {
-                  await client.query(`
-                      INSERT INTO receipt_items (receipt_id, name, quantity, unit_price, total, category)
-                      VALUES ($1, $2, $3, $4, $5, 'General')
-                  `, [rId, item.name, item.quantity || 1, item.price, (item.price * (item.quantity || 1))]);
+                    await client.query(`
+                        INSERT INTO receipt_items (receipt_id, name, quantity, unit_price, total, category)
+                        VALUES ($1, $2, $3, $4, $5, 'General')
+                    `, [rId, item.name, item.quantity || 1, item.price, (item.price * (item.quantity || 1))]);
                 }
             }
         }
 
-        // 5. Update User & Activities if verified (approved)
+        // ============ UPDATE USER & SEND NOTIFICATIONS ============
         if (status === 'verified' && pointsAwarded > 0) {
-            await client.query('UPDATE users SET points_balance = points_balance + $1 WHERE id = $2', [pointsAwarded, userId]);
+            // Award points
+            await client.query('UPDATE users SET points_balance = points_balance + $1, total_spent = total_spent + $2 WHERE id = $3', 
+                [pointsAwarded, totalAmount, userId]);
             
+            // Record activity
             await client.query(`
                 INSERT INTO activities (user_id, type, description, points, date)
                 VALUES ($1, 'earn', $2, $3, NOW())
-            `, [userId, `Earned points at ${supermarketName} (${campaignApplied ? campaignApplied.name : 'Standard'})`, pointsAwarded]);
+            `, [userId, `Earned ${pointsAwarded} points at ${supermarketName} (${campaignApplied?.name || 'Standard'})`, pointsAwarded]);
 
+            // Send reward notification
             await client.query(`
                 INSERT INTO notifications (user_id, title, message, type, date)
                 VALUES ($1, 'Points Earned!', $2, 'reward', NOW())
-            `, [userId, `You earned ${pointsAwarded} points from your receipt at ${supermarketName}.`]);
+            `, [userId, eligibilityMessage]);
             
+            // Update campaign conversion count
             if (campaignApplied) {
-                 await client.query('UPDATE campaigns SET conversions = conversions + 1 WHERE id = $1', [campaignApplied.id]);
+                await client.query('UPDATE campaigns SET conversions = conversions + 1 WHERE id = $1', [campaignApplied.id]);
             }
         } else {
-             // Notify pending
-             await client.query(`
+            // Send informational notification based on eligibility status
+            let notifTitle = 'Receipt Submitted';
+            let notifType: 'system' | 'reward' | 'expiration' = 'system';
+            
+            if (eligibilityStatus === 'no_partner') {
+                notifTitle = 'Store Not Registered';
+            } else if (eligibilityStatus === 'no_campaign') {
+                notifTitle = 'No Active Promotion';
+            } else if (eligibilityStatus === 'below_minimum') {
+                notifTitle = 'Below Minimum Spend';
+            }
+
+            await client.query(`
                 INSERT INTO notifications (user_id, title, message, type, date)
-                VALUES ($1, 'Receipt Submitted', $2, 'system', NOW())
-            `, [userId, `Your receipt from ${supermarketName} has been submitted for review.`]);
+                VALUES ($1, $2, $3, $4, NOW())
+            `, [userId, notifTitle, eligibilityMessage, notifType]);
         }
 
         await client.query('COMMIT');
-        return res.json({ success: true, points: pointsAwarded, status, receiptId: rId, campaign: campaignApplied?.name });
+        
+        // Return detailed response
+        return res.json({ 
+            success: true, 
+            points: pointsAwarded, 
+            status,
+            receiptId: rId, 
+            campaign: campaignApplied?.name || null,
+            eligibility: eligibilityStatus,
+            message: eligibilityMessage,
+            supermarket: {
+                name: supermarketName,
+                isPartner: !!supermarketId
+            }
+        });
 
       } catch (e: any) {
           await client.query('ROLLBACK');
@@ -1208,7 +1279,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
-    // ============ CAMPAIGNS ============
+    // ============ ACTIVE PROMOTIONS (For Shoppers) ============
+    // Returns active campaigns with their partner stores for user display
+    if (path === '/promotions/active' && method === 'GET') {
+      const result = await pool.query(`
+        SELECT 
+          c.id,
+          c.name,
+          c.brand,
+          c.mechanic,
+          c.min_spend as "minSpend",
+          c.reward_type as "rewardType",
+          c.reward_value as "rewardValue",
+          to_char(c.start_date, 'YYYY-MM-DD') as "startDate",
+          to_char(c.end_date, 'YYYY-MM-DD') as "endDate",
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', s.id,
+                'name', s.name,
+                'logoUrl', s.logo_url
+              )
+            ) FILTER (WHERE s.id IS NOT NULL), 
+            '[]'
+          ) as "supermarkets"
+        FROM campaigns c
+        JOIN campaign_supermarkets cs ON c.id = cs.campaign_id
+        JOIN supermarkets s ON cs.supermarket_id = s.id AND s.active = true
+        WHERE c.status = 'active'
+        AND c.start_date <= CURRENT_DATE
+        AND (c.end_date IS NULL OR c.end_date >= CURRENT_DATE)
+        AND (c.max_redemptions IS NULL OR c.conversions < c.max_redemptions)
+        GROUP BY c.id
+        ORDER BY c.end_date ASC NULLS LAST
+      `);
+      return res.json(result.rows);
+    }
+
+    // ============ CAMPAIGNS (Admin) ============
     if (path === '/campaigns' && method === 'GET') {
       const result = await pool.query(`
         SELECT c.id, c.name, c.brand, c.status, to_char(c.start_date, 'YYYY-MM-DD') as "startDate",

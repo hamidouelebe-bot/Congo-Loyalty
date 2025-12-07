@@ -148,13 +148,32 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
       const result = await api.receipts.process(user.id, scannedData, image);
       
       if (result.success) {
-         let msg = `Reçu validé !`;
+         // Handle different eligibility statuses with appropriate messages
+         const eligibility = (result as any).eligibility;
+         const serverMessage = (result as any).message;
+         
          if (result.points > 0) {
-            msg = `Succès ! Vous avez gagné ${result.points} points !${result.campaign ? ` (Campagne: ${result.campaign})` : ''}`;
+            // Success with points!
+            alert(`🎉 ${serverMessage || `Vous avez gagné ${result.points} points !`}`);
          } else {
-            msg += ` En attente de validation.`;
+            // Receipt saved but no points - show why
+            let title = '📋 Reçu enregistré';
+            let message = serverMessage || 'Votre reçu a été enregistré.';
+            
+            if (eligibility === 'no_partner') {
+               title = '⚠️ Magasin non partenaire';
+               message = serverMessage || 'Ce magasin n\'est pas encore partenaire de notre programme de fidélité.';
+            } else if (eligibility === 'no_campaign') {
+               title = '📢 Aucune promotion active';
+               message = serverMessage || 'Il n\'y a pas de promotion active dans ce magasin actuellement.';
+            } else if (eligibility === 'below_minimum') {
+               title = '💰 Montant insuffisant';
+               message = serverMessage || 'Votre achat est en dessous du montant minimum requis pour cette promotion.';
+            }
+            
+            alert(`${title}\n\n${message}`);
          }
-         alert(msg);
+         
          onNavigate(AppView.ShopperDashboard);
       }
     } catch (e: any) {
