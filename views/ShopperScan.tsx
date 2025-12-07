@@ -186,25 +186,28 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang }) => {
   // 2. CAMERA VIEW
   if (isCameraActive) {
     return (
-      <div className="fixed inset-0 bg-black flex flex-col z-50">
+      <div className="fixed inset-0 bg-black z-50 overflow-hidden relative">
          <video 
             ref={videoRef} 
             autoPlay 
             playsInline 
-            className="flex-1 w-full h-full object-cover"
+            className="w-full h-full object-cover"
          />
          <canvas ref={canvasRef} className="hidden" />
          
-         <div className="absolute top-0 w-full p-6 flex justify-between items-center">
-            <button onClick={stopCamera} className="bg-black/40 text-white p-2 rounded-full backdrop-blur-sm">
-               ✕
+         {/* Top Controls Overlay */}
+         <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center z-10">
+            <button onClick={stopCamera} className="bg-black/40 text-white p-2 rounded-full backdrop-blur-sm hover:bg-black/60 transition-colors">
+               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
          </div>
 
-         <div className="bg-black/80 p-8 flex justify-center items-center pb-12">
+         {/* Bottom Controls Overlay */}
+         <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-8 flex justify-center items-center pb-12 z-10">
             <button 
               onClick={captureImage}
-              className="w-20 h-20 bg-white rounded-full border-4 border-gray-300 shadow-xl active:scale-95 transition-transform"
+              className="w-20 h-20 bg-white rounded-full border-4 border-gray-300 shadow-xl active:scale-95 transition-transform hover:border-blue-500"
+              title="Prendre photo"
             ></button>
          </div>
       </div>
