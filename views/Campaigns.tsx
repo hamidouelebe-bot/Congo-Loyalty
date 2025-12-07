@@ -243,12 +243,25 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">{t.campaigns}</h2>
-          <button 
-            onClick={openCreateModal}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-          >
-            + {t.create_new}
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={fetchData}
+              disabled={isLoading}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              title={lang === 'fr' ? 'Actualiser' : 'Refresh'}
+            >
+              <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {isLoading ? (lang === 'fr' ? 'Chargement...' : 'Loading...') : (lang === 'fr' ? 'Actualiser' : 'Refresh')}
+            </button>
+            <button 
+              onClick={openCreateModal}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            >
+              + {t.create_new}
+            </button>
+          </div>
         </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -321,21 +334,50 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
                 <span className="font-medium text-gray-700">{campaign.endDate}</span>
               </div>
 
-              {/* Progress / Safety Limit */}
+              {/* Conversions Progress */}
               <div className="mt-4 pt-4 border-t border-gray-50">
-                <div className="flex justify-between items-end mb-1">
-                    <div className="text-sm text-gray-500">Conversions</div>
+                <div className="flex justify-between items-center mb-2">
+                    <div className="text-sm text-gray-500 flex items-center gap-1.5">
+                        <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Conversions
+                    </div>
                     <div className="text-sm font-bold text-gray-900">
-                        {campaign.conversions.toLocaleString()} 
-                        {campaign.maxRedemptions && <span className="text-gray-400 font-normal"> / {campaign.maxRedemptions.toLocaleString()}</span>}
+                        <span className="text-green-600">{(campaign.conversions || 0).toLocaleString()}</span>
+                        {campaign.maxRedemptions ? (
+                            <span className="text-gray-400 font-normal"> / {campaign.maxRedemptions.toLocaleString()}</span>
+                        ) : (
+                            <span className="text-gray-400 font-normal text-xs ml-1">(illimité)</span>
+                        )}
                     </div>
                 </div>
-                {campaign.maxRedemptions && (
-                    <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                {/* Progress bar */}
+                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    {campaign.maxRedemptions ? (
                         <div 
-                            className={`h-full rounded-full ${campaign.conversions >= campaign.maxRedemptions ? 'bg-red-500' : 'bg-blue-500'}`} 
-                            style={{ width: `${Math.min((campaign.conversions / campaign.maxRedemptions) * 100, 100)}%` }}
+                            className={`h-full rounded-full transition-all duration-500 ${
+                                (campaign.conversions || 0) >= campaign.maxRedemptions 
+                                    ? 'bg-red-500' 
+                                    : (campaign.conversions || 0) >= campaign.maxRedemptions * 0.8 
+                                        ? 'bg-yellow-500' 
+                                        : 'bg-green-500'
+                            }`} 
+                            style={{ width: `${Math.min(((campaign.conversions || 0) / campaign.maxRedemptions) * 100, 100)}%` }}
                         ></div>
+                    ) : (
+                        <div 
+                            className="h-full rounded-full bg-green-500 transition-all duration-500" 
+                            style={{ width: `${Math.min((campaign.conversions || 0) / 100 * 10, 100)}%` }}
+                        ></div>
+                    )}
+                </div>
+                {campaign.maxRedemptions && (campaign.conversions || 0) >= campaign.maxRedemptions && (
+                    <div className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        Limite atteinte
                     </div>
                 )}
               </div>
