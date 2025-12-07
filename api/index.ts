@@ -971,11 +971,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // ============ VALIDATION LAYER 4: Find Partner/Supermarket ============
-        const marketRes = await client.query(
-          'SELECT id, name FROM supermarkets WHERE $1 ILIKE \'%\' || name || \'%\' LIMIT 1', 
+        // ============ VALIDATION LAYER 4: Find Partner/Supermarket (SMART MATCHING) ============
+        // Normalize merchant name for better matching
+        const normalizedMerchant = merchantName
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+          .replace(/\s+/g, ' ')        // Normalize spaces
+          .trim();
+        
+        // Smart matching: Try multiple strategies
+        // Strategy 1: Exact match (case-insensitive)
+        let marketRes = await client.query(
+          `SELECT id, name FROM supermarkets WHERE LOWER(name) = LOWER($1) LIMIT 1`, 
           [merchantName]
         );
+        
+        // Strategy 2: Merchant name contains supermarket name
+        if (marketRes.rows.length === 0) {
+          marketRes = await client.query(
+            `SELECT id, name FROM supermarkets 
+             WHERE LOWER($1) LIKE '%' || LOWER(name) || '%'
+             ORDER BY LENGTH(name) DESC LIMIT 1`, 
+            [merchantName]
+          );
+        }
+        
+        // Strategy 3: Supermarket name contains merchant name
+        if (marketRes.rows.length === 0) {
+          marketRes = await client.query(
+            `SELECT id, name FROM supermarkets 
+             WHERE LOWER(name) LIKE '%' || LOWER($1) || '%'
+             ORDER BY LENGTH(name) DESC LIMIT 1`, 
+            [merchantName]
+          );
+        }
+        
+        // Strategy 4: Normalized matching (remove special chars, spaces)
+        if (marketRes.rows.length === 0) {
+          marketRes = await client.query(
+            `SELECT id, name FROM supermarkets 
+             WHERE LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9]', '', 'g')) 
+                   LIKE '%' || LOWER(REGEXP_REPLACE($1, '[^a-zA-Z0-9]', '', 'g')) || '%'
+             OR LOWER(REGEXP_REPLACE($1, '[^a-zA-Z0-9]', '', 'g'))
+                LIKE '%' || LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9]', '', 'g')) || '%'
+             ORDER BY LENGTH(name) DESC LIMIT 1`, 
+            [merchantName]
+          );
+        }
+        
+        // Strategy 5: Word-based matching (any significant word matches)
+        if (marketRes.rows.length === 0) {
+          const words = normalizedMerchant.split(' ').filter(w => w.length > 3);
+          for (const word of words) {
+            marketRes = await client.query(
+              `SELECT id, name FROM supermarkets 
+               WHERE LOWER(name) LIKE '%' || $1 || '%'
+               LIMIT 1`, 
+              [word]
+            );
+            if (marketRes.rows.length > 0) break;
+          }
+        }
         
         let supermarketId = null;
         let supermarketName = merchantName;
@@ -983,6 +1039,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (marketRes.rows.length > 0) {
           supermarketId = marketRes.rows[0].id;
           supermarketName = marketRes.rows[0].name;
+          console.log(`[RECEIPT] Matched merchant "${merchantName}" to partner "${supermarketName}"`);
+        } else {
+          console.log(`[RECEIPT] No partner match found for: "${merchantName}" (normalized: "${normalizedMerchant}")`);
         }
 
         // ============ VALIDATION LAYER 5: Fuzzy Duplicate Check (GLOBAL) ============
