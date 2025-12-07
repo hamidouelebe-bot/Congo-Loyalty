@@ -121,11 +121,29 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
     }
   };
 
+  // Error code to user-friendly message mapping
+  const getErrorMessage = (code: string, defaultMsg: string): string => {
+    const errorMessages: Record<string, string> = {
+      'DUPLICATE_IMAGE': '⚠️ Cette image de reçu a déjà été soumise. Veuillez scanner un nouveau reçu.',
+      'DUPLICATE_RECEIPT_NUMBER': '⚠️ Ce numéro de reçu a déjà été utilisé.',
+      'DUPLICATE_RECEIPT': '⚠️ Ce reçu a déjà été traité. Vous ne pouvez pas le soumettre à nouveau.',
+      'SIMILAR_RECEIPT_EXISTS': '⚠️ Un reçu très similaire existe déjà. Contactez le support si nécessaire.',
+      'RATE_LIMIT_EXCEEDED': '⚠️ Trop de soumissions. Veuillez attendre quelques minutes.',
+      'LOW_CONFIDENCE': '📷 Image trop floue. Veuillez reprendre la photo avec plus de lumière.',
+      'INVALID_AMOUNT': '❌ Le montant du reçu est invalide.',
+      'AMOUNT_TOO_HIGH': '❌ Le montant dépasse la limite autorisée.',
+      'INVALID_INPUT': '❌ Données manquantes. Veuillez réessayer.',
+    };
+    return errorMessages[code] || defaultMsg;
+  };
+
   const handleConfirm = async () => {
     if (!scannedData || !image) return;
     
     try {
       setIsProcessing(true);
+      setError(null);
+      
       // Use the extracted data and image (base64) to process
       const result = await api.receipts.process(user.id, scannedData, image);
       
@@ -141,10 +159,18 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
       }
     } catch (e: any) {
        console.error("Scan processing error:", e);
-       if (e.code === 'DUPLICATE_RECEIPT') {
-          alert("Ce reçu a déjà été scanné !");
-       } else {
-          alert("Erreur lors du traitement: " + (e.message || "Erreur inconnue"));
+       const errorCode = e.code || '';
+       const userMessage = getErrorMessage(errorCode, e.message || "Erreur inconnue");
+       
+       // Show error in UI instead of just alert for better UX
+       setError(userMessage);
+       
+       // Also show alert for duplicate errors (important user feedback)
+       if (errorCode.includes('DUPLICATE') || errorCode.includes('SIMILAR')) {
+          alert(userMessage);
+          // Reset to allow user to scan a different receipt
+          setImage(null);
+          setScannedData(null);
        }
     } finally {
        setIsProcessing(false);
@@ -189,11 +215,30 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
                 <span className="text-blue-900 font-bold">Total</span>
                 <span className="text-blue-600 font-extrabold text-xl">{scannedData.totalAmount} {scannedData.currency}</span>
              </div>
+
+             {/* Receipt Number Display (if extracted) */}
+             {scannedData.receiptNumber && (
+               <div className="mt-3 text-xs text-gray-500 text-center">
+                 N° Reçu: <span className="font-mono">{scannedData.receiptNumber}</span>
+               </div>
+             )}
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-4 animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm font-medium">{error}</p>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
              <button 
-               onClick={() => { setImage(null); setScannedData(null); }}
+               onClick={() => { setImage(null); setScannedData(null); setError(null); }}
                className="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-xl"
              >
                Rejeter

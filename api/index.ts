@@ -4,7 +4,30 @@ import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
 import { put } from '@vercel/blob';
 import { GoogleGenAI } from "@google/genai";
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
+
+// ============ IMAGE FINGERPRINTING UTILITY ============
+/**
+ * Generate a unique fingerprint hash from image data.
+ * Uses SHA-256 for strong collision resistance.
+ * This prevents the same image from being submitted multiple times.
+ */
+const generateImageHash = (base64Image: string): string => {
+  // Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+  const cleanBase64 = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+  return createHash('sha256').update(cleanBase64).digest('hex');
+};
+
+/**
+ * Normalize receipt data for fuzzy matching.
+ * Helps detect receipts that are similar but have slight OCR variations.
+ */
+const normalizeForComparison = (value: string): string => {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') // Remove special chars
+    .trim();
+};
 
 // Database connection
 const getDatabaseUrl = () => {
@@ -199,14 +222,21 @@ const initDb = async () => {
         status VARCHAR(50) DEFAULT 'pending',
         confidence_score DECIMAL,
         image_url VARCHAR(500),
-        receipt_number VARCHAR(255)
+        receipt_number VARCHAR(255),
+        image_hash VARCHAR(64),
+        created_at TIMESTAMP DEFAULT NOW()
       );
     `);
     
-    // Ensure column exists (migration)
+    // Ensure columns exist (migrations)
     try {
       await pool.query('ALTER TABLE receipts ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(255)');
-    } catch (e) { /* ignore */ }
+      await pool.query('ALTER TABLE receipts ADD COLUMN IF NOT EXISTS image_hash VARCHAR(64)');
+      await pool.query('ALTER TABLE receipts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()');
+      // Create index for faster duplicate lookups
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_receipts_image_hash ON receipts(image_hash)');
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_receipts_receipt_number ON receipts(receipt_number)');
+    } catch (e) { /* ignore migration errors */ }
 
     // Receipt items table
     await pool.query(`
@@ -867,22 +897,85 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true, newBalance: result.rows[0].pointsBalance });
     }
 
-    // ============ RECEIPT PROCESSING ============
+    // ============ RECEIPT PROCESSING (ADVANCED FRAUD DETECTION) ============
     if (path === '/receipts/process' && method === 'POST') {
       const { userId, scannedData, imageUrl } = req.body;
       const { merchantName, totalAmount, date, receiptNumber, items, confidence } = scannedData;
 
+      // ============ VALIDATION LAYER 1: Basic Input Validation ============
       if (!userId || !merchantName || !totalAmount) {
-         return res.status(400).json({ error: 'Missing required data' });
+         return res.status(400).json({ error: 'Missing required data', code: 'INVALID_INPUT' });
+      }
+
+      // Validate amount is reasonable (anti-fraud)
+      if (totalAmount <= 0) {
+         return res.status(400).json({ error: 'Invalid receipt amount', code: 'INVALID_AMOUNT' });
+      }
+
+      if (totalAmount > 10000000) { // 10 million CDF limit
+         return res.status(400).json({ error: 'Receipt amount exceeds maximum allowed', code: 'AMOUNT_TOO_HIGH' });
+      }
+
+      // Validate confidence score (reject very low confidence)
+      if (confidence !== undefined && confidence < 0.3) {
+         return res.status(400).json({ 
+           error: 'Receipt image quality too low. Please take a clearer photo.', 
+           code: 'LOW_CONFIDENCE' 
+         });
       }
 
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
 
-        // 1. Find Partner/Supermarket (Resolve Name First)
-        // Match if DB name is contained in Merchant Name (e.g. DB "Shoprite" in "Shoprite Kinshasa")
-        const marketRes = await client.query('SELECT id, name FROM supermarkets WHERE $1 ILIKE \'%\' || name || \'%\' LIMIT 1', [merchantName]);
+        // ============ VALIDATION LAYER 2: Image Fingerprint Check (GLOBAL) ============
+        // This is the strongest check - prevents the EXACT same image from being used by ANYONE
+        let imageHash: string | null = null;
+        if (imageUrl && imageUrl.startsWith('data:')) {
+          imageHash = generateImageHash(imageUrl);
+          
+          const imageHashDup = await client.query(`
+            SELECT r.id, r.user_id, u.first_name || ' ' || u.last_name as user_name
+            FROM receipts r
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.image_hash = $1 AND r.status != 'rejected'
+          `, [imageHash]);
+
+          if (imageHashDup.rows.length > 0) {
+            await client.query('ROLLBACK');
+            console.log(`[FRAUD] Duplicate image detected. Hash: ${imageHash}, Original Receipt: ${imageHashDup.rows[0].id}`);
+            return res.status(400).json({ 
+              error: 'This exact receipt image has already been submitted.', 
+              code: 'DUPLICATE_IMAGE' 
+            });
+          }
+        }
+
+        // ============ VALIDATION LAYER 3: Receipt Number Check (GLOBAL) ============
+        // If the AI extracted a receipt number, check if it's been used globally
+        const cleanReceiptNumber = receiptNumber ? receiptNumber.toString().trim() : null;
+        if (cleanReceiptNumber && cleanReceiptNumber.length > 0) {
+          const receiptNumDup = await client.query(`
+            SELECT r.id, r.user_id, r.supermarket_name, r.amount, to_char(r.date, 'YYYY-MM-DD') as date
+            FROM receipts r
+            WHERE r.receipt_number = $1 AND r.status != 'rejected'
+          `, [cleanReceiptNumber]);
+
+          if (receiptNumDup.rows.length > 0) {
+            await client.query('ROLLBACK');
+            console.log(`[FRAUD] Duplicate receipt number: ${cleanReceiptNumber}`);
+            return res.status(400).json({ 
+              error: 'This receipt number has already been processed.', 
+              code: 'DUPLICATE_RECEIPT_NUMBER' 
+            });
+          }
+        }
+
+        // ============ VALIDATION LAYER 4: Find Partner/Supermarket ============
+        const marketRes = await client.query(
+          'SELECT id, name FROM supermarkets WHERE $1 ILIKE \'%\' || name || \'%\' LIMIT 1', 
+          [merchantName]
+        );
         
         let supermarketId = null;
         let supermarketName = merchantName;
@@ -892,34 +985,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           supermarketName = marketRes.rows[0].name;
         }
 
-        // 2. Strong Duplicate Check (Receipt Number - Global)
-        if (receiptNumber) {
-            // Check if ANYONE has used this receipt number successfully
-            const duplicate = await client.query('SELECT id FROM receipts WHERE receipt_number = $1 AND status != \'rejected\'', [receiptNumber]);
-            if (duplicate.rows.length > 0) {
-              await client.query('ROLLBACK');
-              return res.status(400).json({ error: 'This receipt has already been processed.', code: 'DUPLICATE_RECEIPT' });
-            }
+        // ============ VALIDATION LAYER 5: Fuzzy Duplicate Check (GLOBAL) ============
+        // Check if ANYONE has submitted a receipt with same merchant, amount, and date
+        // This catches receipts even when image hash or receipt number aren't available
+        const receiptDate = date || new Date().toISOString().split('T')[0];
+        
+        const globalFuzzyDup = await client.query(`
+          SELECT r.id, r.user_id, u.first_name || ' ' || u.last_name as user_name
+          FROM receipts r
+          LEFT JOIN users u ON r.user_id = u.id
+          WHERE LOWER(r.supermarket_name) = LOWER($1)
+          AND r.amount = $2 
+          AND r.date::date = $3::date
+          AND r.status != 'rejected'
+        `, [supermarketName, totalAmount, receiptDate]);
+
+        if (globalFuzzyDup.rows.length > 0) {
+          await client.query('ROLLBACK');
+          const isOwnReceipt = globalFuzzyDup.rows[0].user_id === userId;
+          console.log(`[FRAUD] Fuzzy duplicate detected. Merchant: ${supermarketName}, Amount: ${totalAmount}, Date: ${receiptDate}`);
+          return res.status(400).json({ 
+            error: isOwnReceipt 
+              ? 'You have already submitted this receipt.' 
+              : 'This receipt has already been processed by another user.', 
+            code: 'DUPLICATE_RECEIPT' 
+          });
         }
 
-        // 3. Heuristic Duplicate Check (User Level)
-        // If receipt number is missing OR just to be safe:
-        // Check if THIS user has already submitted a receipt for this merchant, amount, and date.
-        const fuzzyDup = await client.query(`
-            SELECT id FROM receipts 
-            WHERE user_id = $1 
-            AND supermarket_name = $2 
-            AND amount = $3 
-            AND date::date = $4::date
-            AND status != 'rejected'
-        `, [userId, supermarketName, totalAmount, date || new Date()]);
+        // ============ VALIDATION LAYER 6: Time-based Velocity Check ============
+        // Prevent same user from submitting too many receipts in short time (rate limiting)
+        const velocityCheck = await client.query(`
+          SELECT COUNT(*) as count FROM receipts 
+          WHERE user_id = $1 
+          AND created_at > NOW() - INTERVAL '1 hour'
+        `, [userId]);
 
-        if (fuzzyDup.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'You have already scanned this receipt.', code: 'DUPLICATE_RECEIPT' });
+        if (parseInt(velocityCheck.rows[0].count) >= 10) {
+          await client.query('ROLLBACK');
+          console.log(`[FRAUD] Velocity limit exceeded for user: ${userId}`);
+          return res.status(429).json({ 
+            error: 'Too many receipts submitted. Please wait before submitting more.', 
+            code: 'RATE_LIMIT_EXCEEDED' 
+          });
         }
 
-        // 4. Check Active Campaigns
+        // ============ VALIDATION LAYER 7: Similar Amount Check (GLOBAL) ============
+        // Check for very similar receipts within a time window (catches slight OCR variations)
+        const amountTolerance = totalAmount * 0.02; // 2% tolerance
+        const similarAmountDup = await client.query(`
+          SELECT r.id, r.amount, r.supermarket_name
+          FROM receipts r
+          WHERE LOWER(r.supermarket_name) = LOWER($1)
+          AND ABS(r.amount - $2) <= $3
+          AND r.date::date = $4::date
+          AND r.status != 'rejected'
+          AND r.id != ''
+        `, [supermarketName, totalAmount, amountTolerance, receiptDate]);
+
+        if (similarAmountDup.rows.length > 0) {
+          await client.query('ROLLBACK');
+          console.log(`[FRAUD] Similar amount duplicate. Amount: ${totalAmount}, Similar: ${similarAmountDup.rows[0].amount}`);
+          return res.status(400).json({ 
+            error: 'A very similar receipt has already been processed. Please contact support if this is an error.', 
+            code: 'SIMILAR_RECEIPT_EXISTS' 
+          });
+        }
+
+        // ============ ALL CHECKS PASSED - PROCESS RECEIPT ============
+        console.log(`[RECEIPT] Processing valid receipt for user ${userId}: ${supermarketName}, ${totalAmount}`);
+
+        // Check Active Campaigns
         let pointsAwarded = 0;
         let campaignApplied = null;
 
@@ -941,9 +1076,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 
                 // Bonus from campaign
                 let bonusPoints = 0;
-                // Check if reward value is numeric points
                 if (campaignApplied.reward_type === 'points' && campaignApplied.reward_value) {
-                   // If it's a flat bonus (e.g. "50")
                    if (!isNaN(parseInt(campaignApplied.reward_value))) {
                       bonusPoints = parseInt(campaignApplied.reward_value);
                    }
@@ -953,14 +1086,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // 4. Insert Receipt
+        // Insert Receipt with image hash
         const rId = randomUUID();
-        const status = pointsAwarded > 0 ? 'approved' : 'pending'; // Auto-approve if points earned via campaign
+        const status = pointsAwarded > 0 ? 'approved' : 'pending';
 
         await client.query(`
-            INSERT INTO receipts (id, user_id, supermarket_name, amount, date, status, confidence_score, image_url, receipt_number)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [rId, userId, supermarketName, totalAmount, date || new Date(), status, confidence, imageUrl || '', receiptNumber || null]);
+            INSERT INTO receipts (id, user_id, supermarket_name, amount, date, status, confidence_score, image_url, receipt_number, image_hash, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        `, [rId, userId, supermarketName, totalAmount, receiptDate, status, confidence, imageUrl || '', cleanReceiptNumber, imageHash]);
 
         // Items
         if (items && items.length > 0) {
