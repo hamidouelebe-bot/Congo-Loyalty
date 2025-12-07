@@ -876,19 +876,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          return res.status(400).json({ error: 'Missing required data' });
       }
 
-      // 1. Duplicate Check
-      if (receiptNumber) {
-        const duplicate = await pool.query('SELECT id FROM receipts WHERE receipt_number = $1', [receiptNumber]);
-        if (duplicate.rows.length > 0) {
-          return res.status(400).json({ error: 'Receipt already processed', code: 'DUPLICATE_RECEIPT' });
-        }
-      }
-
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
 
-        // 2. Find Partner/Supermarket
+        // 1. Find Partner/Supermarket (Resolve Name First)
         // Match if DB name is contained in Merchant Name (e.g. DB "Shoprite" in "Shoprite Kinshasa")
         const marketRes = await client.query('SELECT id, name FROM supermarkets WHERE $1 ILIKE \'%\' || name || \'%\' LIMIT 1', [merchantName]);
         
@@ -900,7 +892,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           supermarketName = marketRes.rows[0].name;
         }
 
-        // 3. Check Active Campaigns
+        // 2. Strong Duplicate Check (Receipt Number - Global)
+        if (receiptNumber) {
+            // Check if ANYONE has used this receipt number successfully
+            const duplicate = await client.query('SELECT id FROM receipts WHERE receipt_number = $1 AND status != \'rejected\'', [receiptNumber]);
+            if (duplicate.rows.length > 0) {
+              await client.query('ROLLBACK');
+              return res.status(400).json({ error: 'This receipt has already been processed.', code: 'DUPLICATE_RECEIPT' });
+            }
+        }
+
+        // 3. Heuristic Duplicate Check (User Level)
+        // If receipt number is missing OR just to be safe:
+        // Check if THIS user has already submitted a receipt for this merchant, amount, and date.
+        const fuzzyDup = await client.query(`
+            SELECT id FROM receipts 
+            WHERE user_id = $1 
+            AND supermarket_name = $2 
+            AND amount = $3 
+            AND date::date = $4::date
+            AND status != 'rejected'
+        `, [userId, supermarketName, totalAmount, date || new Date()]);
+
+        if (fuzzyDup.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'You have already scanned this receipt.', code: 'DUPLICATE_RECEIPT' });
+        }
+
+        // 4. Check Active Campaigns
         let pointsAwarded = 0;
         let campaignApplied = null;
 
