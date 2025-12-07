@@ -16,6 +16,7 @@ interface ActivePromotion {
   rewardValue: string;
   startDate: string;
   endDate: string;
+  imageUrl?: string;
   supermarkets: { id: string; name: string; logoUrl: string }[];
 }
 
@@ -54,6 +55,44 @@ const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogou
   
   // Check for unread notifications
   const unreadCount = notifications.filter(n => !n.read && n.userId === user.id).length;
+  
+  // Sharing state
+  const [sharingPromo, setSharingPromo] = useState<ActivePromotion | null>(null);
+
+  // Share functions
+  const getShareUrl = (promo: ActivePromotion) => {
+    return `${window.location.origin}?promo=${promo.id}`;
+  };
+
+  const shareToFacebook = (promo: ActivePromotion) => {
+    const url = encodeURIComponent(getShareUrl(promo));
+    const text = encodeURIComponent(`🎉 ${promo.name} - ${promo.mechanic}`);
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank', 'width=600,height=400');
+  };
+
+  const shareToTwitter = (promo: ActivePromotion) => {
+    const url = encodeURIComponent(getShareUrl(promo));
+    const text = encodeURIComponent(`🎉 Check out this promotion: ${promo.name} - ${promo.mechanic}`);
+    window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank', 'width=600,height=400');
+  };
+
+  const shareToTikTok = (promo: ActivePromotion) => {
+    // TikTok doesn't have a direct share URL, copy text for user to paste
+    const text = `🎉 ${promo.name}\n${promo.mechanic}\n${getShareUrl(promo)}`;
+    navigator.clipboard.writeText(text);
+    alert(lang === 'fr' ? 'Texte copié ! Collez-le sur TikTok.' : 'Text copied! Paste it on TikTok.');
+  };
+
+  const shareByEmail = (promo: ActivePromotion) => {
+    const subject = encodeURIComponent(`🎉 ${promo.name} - ${promo.brand}`);
+    const body = encodeURIComponent(`Hey!\n\nCheck out this amazing promotion:\n\n${promo.name}\n${promo.mechanic}\n\n${promo.rewardType === 'points' ? `Earn ${promo.rewardValue} points!` : ''}\n\nLink: ${getShareUrl(promo)}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  const copyUrl = (promo: ActivePromotion) => {
+    navigator.clipboard.writeText(getShareUrl(promo));
+    alert(lang === 'fr' ? 'Lien copié !' : 'Link copied!');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans">
@@ -183,55 +222,84 @@ const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogou
                </p>
              </div>
            ) : (
-             <div className="space-y-3">
+             <div className="space-y-4">
                {promotions.slice(0, 3).map((promo) => (
                  <div 
                    key={promo.id}
-                   className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl p-4 text-white shadow-md relative overflow-hidden"
+                   className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100"
                  >
-                   <div className="relative z-10">
+                   {/* Campaign Image */}
+                   {promo.imageUrl ? (
+                     <img 
+                       src={promo.imageUrl} 
+                       alt={promo.name}
+                       className="w-full h-32 object-cover"
+                     />
+                   ) : (
+                     <div className="w-full h-32 bg-gradient-to-r from-purple-500 to-indigo-600 flex items-center justify-center">
+                       <span className="text-5xl">🎁</span>
+                     </div>
+                   )}
+                   
+                   <div className="p-4">
+                     {/* Brand & Points Badge */}
                      <div className="flex justify-between items-start mb-2">
-                       <p className="text-xs font-bold text-purple-200 uppercase tracking-wider">{promo.brand}</p>
+                       <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase">
+                         {promo.brand}
+                       </span>
                        {promo.rewardType === 'points' && (
-                         <span className="bg-white/20 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                         <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
                            ⭐ +{promo.rewardValue} pts
                          </span>
                        )}
                      </div>
-                     <h4 className="font-bold text-lg mb-1">{promo.name}</h4>
-                     <p className="text-xs text-purple-100 opacity-90 mb-3 line-clamp-2">{promo.mechanic}</p>
-                     <div className="flex justify-between items-center">
-                       <div className="text-xs text-purple-200">
-                         {promo.minSpend && (
-                           <span>{lang === 'fr' ? 'Min:' : 'Min:'} {promo.minSpend.toLocaleString()} CDF</span>
-                         )}
-                       </div>
-                       <button 
-                         onClick={() => onNavigate(AppView.ShopperScan)}
-                         className="bg-white text-purple-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm hover:bg-purple-50 transition-colors"
-                       >
-                         {lang === 'fr' ? 'Scanner' : 'Scan Now'}
-                       </button>
-                     </div>
+                     
+                     {/* Title & Description */}
+                     <h4 className="font-bold text-gray-900 text-lg mb-1">{promo.name}</h4>
+                     <p className="text-sm text-gray-600 mb-3 line-clamp-2">{promo.mechanic}</p>
+                     
+                     {/* Min Spend */}
+                     {promo.minSpend && (
+                       <p className="text-xs text-gray-500 mb-3">
+                         {lang === 'fr' ? 'Achat min:' : 'Min spend:'} <span className="font-bold">{promo.minSpend.toLocaleString()} CDF</span>
+                       </p>
+                     )}
+                     
                      {/* Participating stores */}
                      {promo.supermarkets.length > 0 && (
-                       <div className="mt-3 pt-3 border-t border-white/20">
-                         <p className="text-[10px] text-purple-200 mb-1">{lang === 'fr' ? 'Chez:' : 'At:'}</p>
+                       <div className="mb-3 pb-3 border-b border-gray-100">
+                         <p className="text-xs text-gray-500 mb-1">{lang === 'fr' ? 'Magasins:' : 'Stores:'}</p>
                          <div className="flex flex-wrap gap-1">
                            {promo.supermarkets.slice(0, 2).map(s => (
-                             <span key={s.id} className="bg-white/10 text-white text-[10px] px-2 py-0.5 rounded">
+                             <span key={s.id} className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded">
                                {s.name}
                              </span>
                            ))}
                            {promo.supermarkets.length > 2 && (
-                             <span className="text-purple-200 text-[10px]">+{promo.supermarkets.length - 2}</span>
+                             <span className="text-gray-400 text-xs">+{promo.supermarkets.length - 2}</span>
                            )}
                          </div>
                        </div>
                      )}
-                   </div>
-                   <div className="absolute right-0 bottom-0 opacity-20 transform translate-x-2 translate-y-2">
-                     <svg width="80" height="80" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                     
+                     {/* Action Buttons */}
+                     <div className="flex gap-2">
+                       <button 
+                         onClick={() => onNavigate(AppView.ShopperScan)}
+                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors"
+                       >
+                         {lang === 'fr' ? '📸 Scanner' : '📸 Scan'}
+                       </button>
+                       <button 
+                         onClick={() => setSharingPromo(promo)}
+                         className="bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg transition-colors"
+                         title={lang === 'fr' ? 'Partager' : 'Share'}
+                       >
+                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                         </svg>
+                       </button>
+                     </div>
                    </div>
                  </div>
                ))}
@@ -272,6 +340,109 @@ const ShopperDashboard: React.FC<ShopperDashboardProps> = ({ onNavigate, onLogou
            <span className="text-[10px] font-medium">{t.nav_profile}</span>
         </button>
       </div>
+
+      {/* Share Modal */}
+      {sharingPromo && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                {lang === 'fr' ? 'Partager cette promotion' : 'Share this promotion'}
+              </h3>
+              <button 
+                onClick={() => setSharingPromo(null)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Preview */}
+            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+              <p className="font-bold text-gray-900">{sharingPromo.name}</p>
+              <p className="text-sm text-gray-600">{sharingPromo.brand}</p>
+            </div>
+            
+            {/* Share Buttons */}
+            <div className="grid grid-cols-5 gap-3 mb-4">
+              {/* Facebook */}
+              <button 
+                onClick={() => { shareToFacebook(sharingPromo); setSharingPromo(null); }}
+                className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-blue-50 transition-colors"
+              >
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-600">Facebook</span>
+              </button>
+              
+              {/* X/Twitter */}
+              <button 
+                onClick={() => { shareToTwitter(sharingPromo); setSharingPromo(null); }}
+                className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-600">X</span>
+              </button>
+              
+              {/* TikTok */}
+              <button 
+                onClick={() => { shareToTikTok(sharingPromo); setSharingPromo(null); }}
+                className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-600">TikTok</span>
+              </button>
+              
+              {/* Email */}
+              <button 
+                onClick={() => { shareByEmail(sharingPromo); setSharingPromo(null); }}
+                className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-red-50 transition-colors"
+              >
+                <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-600">Email</span>
+              </button>
+              
+              {/* Copy Link */}
+              <button 
+                onClick={() => { copyUrl(sharingPromo); setSharingPromo(null); }}
+                className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-green-50 transition-colors"
+              >
+                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-600">{lang === 'fr' ? 'Copier' : 'Copy'}</span>
+              </button>
+            </div>
+            
+            {/* Cancel */}
+            <button 
+              onClick={() => setSharingPromo(null)}
+              className="w-full py-3 text-gray-600 font-medium rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {lang === 'fr' ? 'Annuler' : 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

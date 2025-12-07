@@ -266,8 +266,14 @@ const initDb = async () => {
         conversions INTEGER DEFAULT 0,
         target_audience VARCHAR(50),
         reward_type VARCHAR(50),
-        reward_value VARCHAR(255)
+        reward_value VARCHAR(255),
+        image_url TEXT
       );
+    `);
+    
+    // Add image_url column if it doesn't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS image_url TEXT;
     `);
 
     // Campaign supermarkets
@@ -1355,6 +1361,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           c.min_spend as "minSpend",
           c.reward_type as "rewardType",
           c.reward_value as "rewardValue",
+          c.image_url as "imageUrl",
           to_char(c.start_date, 'YYYY-MM-DD') as "startDate",
           to_char(c.end_date, 'YYYY-MM-DD') as "endDate",
           COALESCE(
@@ -1386,7 +1393,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SELECT c.id, c.name, c.brand, c.status, to_char(c.start_date, 'YYYY-MM-DD') as "startDate",
           to_char(c.end_date, 'YYYY-MM-DD') as "endDate", c.mechanic, c.min_spend as "minSpend",
           c.max_redemptions as "maxRedemptions", c.conversions, c.target_audience as "targetAudience",
-          c.reward_type as "rewardType", c.reward_value as "rewardValue",
+          c.reward_type as "rewardType", c.reward_value as "rewardValue", c.image_url as "imageUrl",
           COALESCE(array_agg(cs.supermarket_id) FILTER (WHERE cs.supermarket_id IS NOT NULL), '{}') as "supermarketIds"
         FROM campaigns c LEFT JOIN campaign_supermarkets cs ON c.id = cs.campaign_id GROUP BY c.id
         ORDER BY c.id DESC
@@ -1395,16 +1402,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (path === '/campaigns' && method === 'POST') {
-      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds } = req.body;
+      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds, imageUrl } = req.body;
       
       const result = await pool.query(`
-        INSERT INTO campaigns (name, brand, status, start_date, end_date, mechanic, min_spend, max_redemptions, target_audience, reward_type, reward_value, conversions)
-        VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, 0)
+        INSERT INTO campaigns (name, brand, status, start_date, end_date, mechanic, min_spend, max_redemptions, target_audience, reward_type, reward_value, conversions, image_url)
+        VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, 0, $11)
         RETURNING id, name, brand, status, to_char(start_date, 'YYYY-MM-DD') as "startDate",
           to_char(end_date, 'YYYY-MM-DD') as "endDate", mechanic, min_spend as "minSpend",
           max_redemptions as "maxRedemptions", conversions, target_audience as "targetAudience",
-          reward_type as "rewardType", reward_value as "rewardValue"
-      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue]);
+          reward_type as "rewardType", reward_value as "rewardValue", image_url as "imageUrl"
+      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, imageUrl || null]);
 
       const campaignId = result.rows[0].id;
 
@@ -1421,20 +1428,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (path.match(/^\/campaigns\/[\w-]+$/) && method === 'PUT') {
       const id = path.split('/')[2];
-      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds } = req.body;
+      const { name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, supermarketIds, imageUrl } = req.body;
       
       const result = await pool.query(`
         UPDATE campaigns SET 
           name = COALESCE($1, name), brand = COALESCE($2, brand), start_date = COALESCE($3, start_date),
           end_date = COALESCE($4, end_date), mechanic = COALESCE($5, mechanic), min_spend = COALESCE($6, min_spend),
           max_redemptions = COALESCE($7, max_redemptions), target_audience = COALESCE($8, target_audience),
-          reward_type = COALESCE($9, reward_type), reward_value = COALESCE($10, reward_value)
-        WHERE id = $11
+          reward_type = COALESCE($9, reward_type), reward_value = COALESCE($10, reward_value),
+          image_url = COALESCE($11, image_url)
+        WHERE id = $12
         RETURNING id, name, brand, status, to_char(start_date, 'YYYY-MM-DD') as "startDate",
           to_char(end_date, 'YYYY-MM-DD') as "endDate", mechanic, min_spend as "minSpend",
           max_redemptions as "maxRedemptions", conversions, target_audience as "targetAudience",
-          reward_type as "rewardType", reward_value as "rewardValue"
-      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, id]);
+          reward_type as "rewardType", reward_value as "rewardValue", image_url as "imageUrl"
+      `, [name, brand, startDate, endDate, mechanic, minSpend, maxRedemptions, targetAudience, rewardType, rewardValue, imageUrl, id]);
 
       if (result.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
 

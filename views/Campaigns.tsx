@@ -88,6 +88,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
     rewardType: 'points' | 'voucher' | 'giveaway';
     rewardValue: string | number;
     supermarketIds: string[];
+    imageUrl: string;
   }>({ 
     name: '', 
     brand: '', 
@@ -99,8 +100,10 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
     targetAudience: 'all',
     rewardType: 'points',
     rewardValue: '',
-    supermarketIds: []
+    supermarketIds: [],
+    imageUrl: ''
   });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const openCreateModal = () => {
     setEditingCampaign(null);
@@ -115,8 +118,10 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
       targetAudience: 'all',
       rewardType: 'points',
       rewardValue: '',
-      supermarketIds: []
+      supermarketIds: [],
+      imageUrl: ''
     });
+    setImagePreview(null);
     setIsModalOpen(true);
   };
 
@@ -133,9 +138,25 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
       targetAudience: c.targetAudience || 'all',
       rewardType: c.rewardType || 'points',
       rewardValue: c.rewardValue || '',
-      supermarketIds: c.supermarketIds || []
+      supermarketIds: c.supermarketIds || [],
+      imageUrl: c.imageUrl || ''
     });
+    setImagePreview(c.imageUrl || null);
     setIsModalOpen(true);
+  };
+
+  // Handle image upload
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setFormData(prev => ({ ...prev, imageUrl: base64 }));
+        setImagePreview(base64);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -430,6 +451,58 @@ const Campaigns: React.FC<CampaignsProps> = ({ lang, onNavigate }) => {
                   placeholder="e.g. Kellogg's"
                 />
               </div>
+          </div>
+
+          {/* Campaign Image Upload */}
+          <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {lang === 'fr' ? '📷 Image de la Campagne' : '📷 Campaign Image'}
+            </label>
+            <div className="flex items-center gap-4">
+              {imagePreview ? (
+                <div className="relative">
+                  <img 
+                    src={imagePreview} 
+                    alt="Campaign preview" 
+                    className="w-32 h-20 object-cover rounded-lg border border-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setImagePreview(null); setFormData(prev => ({ ...prev, imageUrl: '' })); }}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <div className="w-32 h-20 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              )}
+              <div className="flex-1">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="campaign-image-upload"
+                />
+                <label
+                  htmlFor="campaign-image-upload"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  {lang === 'fr' ? 'Télécharger une image' : 'Upload Image'}
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  {lang === 'fr' ? 'JPG, PNG ou GIF. Max 2MB.' : 'JPG, PNG or GIF. Max 2MB.'}
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">

@@ -94,6 +94,7 @@ export interface Campaign {
   supermarketIds: string[]; // Point of sales scope
   rewardType: 'points' | 'voucher' | 'giveaway';
   rewardValue: string | number;
+  imageUrl?: string; // Campaign promotional image
 }
 
 export interface ReceiptItem {
