@@ -1087,7 +1087,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Insert Receipt with image hash
         const rId = randomUUID();
-        const status = pointsAwarded > 0 ? 'approved' : 'pending';
+        const status = pointsAwarded > 0 ? 'verified' : 'pending';
 
         await client.query(`
             INSERT INTO receipts (id, user_id, supermarket_name, amount, date, status, confidence_score, image_url, receipt_number, image_hash, created_at)
@@ -1107,8 +1107,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // 5. Update User & Activities if approved
-        if (status === 'approved' && pointsAwarded > 0) {
+        // 5. Update User & Activities if verified (approved)
+        if (status === 'verified' && pointsAwarded > 0) {
             await client.query('UPDATE users SET points_balance = points_balance + $1 WHERE id = $2', [pointsAwarded, userId]);
             
             await client.query(`
@@ -1325,12 +1325,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = path.split('/')[2];
       let { status, points } = req.body;
       
-      // Map 'verified' to 'approved' for frontend compatibility
-      if (status === 'verified') {
-        status = 'approved';
+      // Map 'approved' to 'verified' for database constraint compatibility
+      if (status === 'approved') {
+        status = 'verified';
       }
       
-      if (!['approved', 'rejected', 'pending'].includes(status)) {
+      if (!['verified', 'rejected', 'pending'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
       }
 
@@ -1348,8 +1348,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(404).json({ error: 'Receipt not found' });
         }
 
-        // If approved and points provided, award points
-        if (status === 'approved' && points && points > 0) {
+        // If verified (approved) and points provided, award points
+        if (status === 'verified' && points && points > 0) {
           const userId = updateRes.rows[0].user_id;
           await client.query(
             'UPDATE users SET points_balance = points_balance + $1 WHERE id = $2',
