@@ -1054,17 +1054,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[RECEIPT] Processing receipt for user ${userId}: ${supermarketName}, ${totalAmount}`);
 
         // ============ CAMPAIGN & ELIGIBILITY CHECK ============
+        // Only receipts that pass all checks will be saved
         let pointsAwarded = 0;
-        let campaignApplied = null;
-        let eligibilityStatus: 'eligible' | 'no_partner' | 'no_campaign' | 'below_minimum' = 'no_partner';
+        let campaignApplied: any = null;
         let eligibilityMessage = '';
 
         // STEP 1: Check if supermarket is a registered partner
         if (!supermarketId) {
-            // Supermarket not found in our partner network
-            eligibilityStatus = 'no_partner';
-            eligibilityMessage = `"${merchantName}" is not a registered partner store. Your receipt has been saved but no points can be earned at this location.`;
-            console.log(`[RECEIPT] Store not in partner network: ${merchantName}`);
+            // Supermarket not found in our partner network - REJECT immediately
+            await client.query('ROLLBACK');
+            console.log(`[RECEIPT] REJECTED - Store not in partner network: ${merchantName}`);
+            return res.status(400).json({
+                success: false,
+                error: `"${merchantName}" n'est pas un magasin partenaire. Veuillez scanner un reçu d'un de nos partenaires.`,
+                code: 'NOT_PARTNER_STORE',
+                eligibility: 'no_partner',
+                message: `"${merchantName}" is not a registered partner store. Please scan a receipt from one of our partner stores.`
+            });
         } else {
             // STEP 2: Check for active campaigns at this supermarket
             const campaigns = await client.query(`
@@ -1081,10 +1087,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `, [supermarketId]);
 
             if (campaigns.rows.length === 0) {
-                // Store is partner but no active campaign
-                eligibilityStatus = 'no_campaign';
-                eligibilityMessage = `${supermarketName} is a partner store, but there are no active loyalty programs at this time. Your receipt has been saved for future reference.`;
-                console.log(`[RECEIPT] No active campaign for partner: ${supermarketName}`);
+                // Store is partner but no active campaign - REJECT immediately
+                await client.query('ROLLBACK');
+                console.log(`[RECEIPT] REJECTED - No active campaign for partner: ${supermarketName}`);
+                return res.status(400).json({
+                    success: false,
+                    error: `${supermarketName} est un magasin partenaire, mais il n'y a pas de programme de fidélité actif en ce moment.`,
+                    code: 'NO_ACTIVE_CAMPAIGN',
+                    eligibility: 'no_campaign',
+                    message: `${supermarketName} is a partner store, but there are no active loyalty programs at this time.`
+                });
             } else {
                 // STEP 3: Find best matching campaign (check minimum spend)
                 const eligibleCampaigns = campaigns.rows.filter(c => 
@@ -1092,21 +1104,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 );
 
                 if (eligibleCampaigns.length === 0) {
-                    // Has campaigns but doesn't meet minimum spend
+                    // Has campaigns but doesn't meet minimum spend - REJECT immediately
                     const lowestMinSpend = Math.min(...campaigns.rows.map(c => parseFloat(c.min_spend || 0)));
-                    eligibilityStatus = 'below_minimum';
-                    eligibilityMessage = `Your purchase of ${totalAmount} CDF is below the minimum spend of ${lowestMinSpend} CDF required for the current promotion at ${supermarketName}.`;
-                    console.log(`[RECEIPT] Below minimum spend: ${totalAmount} < ${lowestMinSpend}`);
+                    await client.query('ROLLBACK');
+                    console.log(`[RECEIPT] REJECTED - Below minimum spend: ${totalAmount} < ${lowestMinSpend}`);
+                    return res.status(400).json({
+                        success: false,
+                        error: `Votre achat de ${totalAmount} CDF est inférieur au montant minimum de ${lowestMinSpend} CDF requis pour la promotion en cours chez ${supermarketName}.`,
+                        code: 'BELOW_MINIMUM_SPEND',
+                        eligibility: 'below_minimum',
+                        message: `Your purchase of ${totalAmount} CDF is below the minimum spend of ${lowestMinSpend} CDF required for the current promotion at ${supermarketName}.`,
+                        minSpend: lowestMinSpend,
+                        amount: totalAmount
+                    });
                 } else {
                     // STEP 4: Apply the best campaign
                     campaignApplied = eligibleCampaigns[0];
-                    eligibilityStatus = 'eligible';
                     
                     // Check if campaign has reached max redemptions
                     if (campaignApplied.max_redemptions && campaignApplied.conversions >= campaignApplied.max_redemptions) {
-                        eligibilityStatus = 'no_campaign';
-                        eligibilityMessage = `The promotion "${campaignApplied.name}" has reached its maximum redemptions. Your receipt has been saved.`;
-                        campaignApplied = null;
+                        await client.query('ROLLBACK');
+                        console.log(`[RECEIPT] REJECTED - Campaign max redemptions reached: ${campaignApplied.name}`);
+                        return res.status(400).json({
+                            success: false,
+                            error: `La promotion "${campaignApplied.name}" a atteint son nombre maximum d'utilisations.`,
+                            code: 'CAMPAIGN_MAX_REACHED',
+                            eligibility: 'no_campaign',
+                            message: `The promotion "${campaignApplied.name}" has reached its maximum redemptions.`
+                        });
                     } else {
                         // Calculate points
                         const basePoints = Math.floor(totalAmount / 1000); // 1 point per 1000 CDF
@@ -1127,14 +1152,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // ============ SAVE RECEIPT ============
+        // ============ SAVE RECEIPT (Only eligible receipts reach this point) ============
         const rId = randomUUID();
-        const status = pointsAwarded > 0 ? 'verified' : 'pending';
 
         await client.query(`
             INSERT INTO receipts (id, user_id, supermarket_name, amount, date, status, confidence_score, image_url, receipt_number, image_hash, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-        `, [rId, userId, supermarketName, totalAmount, receiptDate, status, confidence, imageUrl || '', cleanReceiptNumber, imageHash]);
+            VALUES ($1, $2, $3, $4, $5, 'verified', $6, $7, $8, $9, NOW())
+        `, [rId, userId, supermarketName, totalAmount, receiptDate, confidence, imageUrl || '', cleanReceiptNumber, imageHash]);
 
         // Save receipt items
         if (items && items.length > 0) {
@@ -1149,60 +1173,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ============ UPDATE USER & SEND NOTIFICATIONS ============
-        if (status === 'verified' && pointsAwarded > 0) {
-            // Award points
-            await client.query('UPDATE users SET points_balance = points_balance + $1, total_spent = total_spent + $2 WHERE id = $3', 
-                [pointsAwarded, totalAmount, userId]);
-            
-            // Record activity
-            await client.query(`
-                INSERT INTO activities (user_id, type, description, points, date)
-                VALUES ($1, 'earn', $2, $3, NOW())
-            `, [userId, `Earned ${pointsAwarded} points at ${supermarketName} (${campaignApplied?.name || 'Standard'})`, pointsAwarded]);
+        // At this point, the receipt is always eligible (ineligible receipts were rejected above)
+        
+        // Award points
+        await client.query('UPDATE users SET points_balance = points_balance + $1, total_spent = total_spent + $2 WHERE id = $3', 
+            [pointsAwarded, totalAmount, userId]);
+        
+        // Record activity
+        await client.query(`
+            INSERT INTO activities (user_id, type, description, points, date)
+            VALUES ($1, 'earn', $2, $3, NOW())
+        `, [userId, `Earned ${pointsAwarded} points at ${supermarketName} (${campaignApplied?.name || 'Standard'})`, pointsAwarded]);
 
-            // Send reward notification
-            await client.query(`
-                INSERT INTO notifications (user_id, title, message, type, date)
-                VALUES ($1, 'Points Earned!', $2, 'reward', NOW())
-            `, [userId, eligibilityMessage]);
-            
-            // Update campaign conversion count
-            if (campaignApplied) {
-                await client.query('UPDATE campaigns SET conversions = conversions + 1 WHERE id = $1', [campaignApplied.id]);
-            }
-        } else {
-            // Send informational notification based on eligibility status
-            let notifTitle = 'Receipt Submitted';
-            let notifType: 'system' | 'reward' | 'expiration' = 'system';
-            
-            if (eligibilityStatus === 'no_partner') {
-                notifTitle = 'Store Not Registered';
-            } else if (eligibilityStatus === 'no_campaign') {
-                notifTitle = 'No Active Promotion';
-            } else if (eligibilityStatus === 'below_minimum') {
-                notifTitle = 'Below Minimum Spend';
-            }
-
-            await client.query(`
-                INSERT INTO notifications (user_id, title, message, type, date)
-                VALUES ($1, $2, $3, $4, NOW())
-            `, [userId, notifTitle, eligibilityMessage, notifType]);
-        }
+        // Send reward notification
+        await client.query(`
+            INSERT INTO notifications (user_id, title, message, type, date)
+            VALUES ($1, 'Points Earned!', $2, 'reward', NOW())
+        `, [userId, eligibilityMessage]);
+        
+        // Update campaign conversion count
+        await client.query('UPDATE campaigns SET conversions = conversions + 1 WHERE id = $1', [campaignApplied.id]);
 
         await client.query('COMMIT');
         
-        // Return detailed response
+        // Return success response
         return res.json({ 
             success: true, 
             points: pointsAwarded, 
-            status,
+            status: 'verified',
             receiptId: rId, 
-            campaign: campaignApplied?.name || null,
-            eligibility: eligibilityStatus,
+            campaign: campaignApplied.name,
+            eligibility: 'eligible',
             message: eligibilityMessage,
             supermarket: {
                 name: supermarketName,
-                isPartner: !!supermarketId
+                isPartner: true
             }
         });
 

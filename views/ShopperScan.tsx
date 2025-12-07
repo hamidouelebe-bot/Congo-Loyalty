@@ -124,11 +124,18 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
   // Error code to user-friendly message mapping
   const getErrorMessage = (code: string, defaultMsg: string): string => {
     const errorMessages: Record<string, string> = {
+      // Duplicate errors
       'DUPLICATE_IMAGE': '⚠️ Cette image de reçu a déjà été soumise. Veuillez scanner un nouveau reçu.',
       'DUPLICATE_RECEIPT_NUMBER': '⚠️ Ce numéro de reçu a déjà été utilisé.',
       'DUPLICATE_RECEIPT': '⚠️ Ce reçu a déjà été traité. Vous ne pouvez pas le soumettre à nouveau.',
       'SIMILAR_RECEIPT_EXISTS': '⚠️ Un reçu très similaire existe déjà. Contactez le support si nécessaire.',
       'RATE_LIMIT_EXCEEDED': '⚠️ Trop de soumissions. Veuillez attendre quelques minutes.',
+      // Eligibility errors - receipt NOT saved
+      'NOT_PARTNER_STORE': '🏪 Ce magasin n\'est pas partenaire de notre programme de fidélité. Scannez un reçu d\'un de nos partenaires.',
+      'NO_ACTIVE_CAMPAIGN': '📢 Aucune promotion active dans ce magasin actuellement. Revenez plus tard !',
+      'BELOW_MINIMUM_SPEND': '💰 Votre achat est en dessous du montant minimum requis pour cette promotion.',
+      'CAMPAIGN_MAX_REACHED': '⏱️ Cette promotion a atteint son nombre maximum d\'utilisations.',
+      // Validation errors
       'LOW_CONFIDENCE': '📷 Image trop floue. Veuillez reprendre la photo avec plus de lumière.',
       'INVALID_AMOUNT': '❌ Le montant du reçu est invalide.',
       'AMOUNT_TOO_HIGH': '❌ Le montant dépasse la limite autorisée.',
@@ -148,32 +155,11 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
       const result = await api.receipts.process(user.id, scannedData, image);
       
       if (result.success) {
-         // Handle different eligibility statuses with appropriate messages
-         const eligibility = (result as any).eligibility;
+         // Only eligible receipts return success - always has points
          const serverMessage = (result as any).message;
+         const campaign = (result as any).campaign;
          
-         if (result.points > 0) {
-            // Success with points!
-            alert(`🎉 ${serverMessage || `Vous avez gagné ${result.points} points !`}`);
-         } else {
-            // Receipt saved but no points - show why
-            let title = '📋 Reçu enregistré';
-            let message = serverMessage || 'Votre reçu a été enregistré.';
-            
-            if (eligibility === 'no_partner') {
-               title = '⚠️ Magasin non partenaire';
-               message = serverMessage || 'Ce magasin n\'est pas encore partenaire de notre programme de fidélité.';
-            } else if (eligibility === 'no_campaign') {
-               title = '📢 Aucune promotion active';
-               message = serverMessage || 'Il n\'y a pas de promotion active dans ce magasin actuellement.';
-            } else if (eligibility === 'below_minimum') {
-               title = '💰 Montant insuffisant';
-               message = serverMessage || 'Votre achat est en dessous du montant minimum requis pour cette promotion.';
-            }
-            
-            alert(`${title}\n\n${message}`);
-         }
-         
+         alert(`🎉 ${serverMessage || `Félicitations ! Vous avez gagné ${result.points} points !`}${campaign ? `\n\nCampagne: ${campaign}` : ''}`);
          onNavigate(AppView.ShopperDashboard);
       }
     } catch (e: any) {
@@ -181,15 +167,22 @@ const ShopperScan: React.FC<ShopperScanProps> = ({ onNavigate, lang, user }) => 
        const errorCode = e.code || '';
        const userMessage = getErrorMessage(errorCode, e.message || "Erreur inconnue");
        
-       // Show error in UI instead of just alert for better UX
-       setError(userMessage);
+       // Show error with alert for important feedback
+       alert(userMessage);
        
-       // Also show alert for duplicate errors (important user feedback)
-       if (errorCode.includes('DUPLICATE') || errorCode.includes('SIMILAR')) {
-          alert(userMessage);
-          // Reset to allow user to scan a different receipt
+       // Reset scanner for all rejection errors so user can try a different receipt
+       const resetCodes = [
+          'DUPLICATE', 'SIMILAR', 
+          'NOT_PARTNER_STORE', 'NO_ACTIVE_CAMPAIGN', 
+          'BELOW_MINIMUM_SPEND', 'CAMPAIGN_MAX_REACHED'
+       ];
+       
+       if (resetCodes.some(code => errorCode.includes(code))) {
           setImage(null);
           setScannedData(null);
+          setError(null);
+       } else {
+          setError(userMessage);
        }
     } finally {
        setIsProcessing(false);
