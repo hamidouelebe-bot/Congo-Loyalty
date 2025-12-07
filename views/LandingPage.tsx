@@ -51,12 +51,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, co
                 {t.nav_shopper}
               </button>
               <button 
-                onClick={() => { onNavigate(AppView.PartnerLogin); setIsMenuOpen(false); }}
-                className="text-left font-bold text-gray-900 py-2 hover:text-emerald-600"
-              >
-                Partner Portal
-              </button>
-              <button 
                 onClick={() => { onNavigate(AppView.Login); setIsMenuOpen(false); }}
                 className="text-left font-bold text-gray-900 py-2 hover:text-blue-600"
               >
@@ -94,12 +88,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, lang, setLang, co
             className="text-gray-600 hover:text-blue-600 font-medium px-2 py-2 transition-colors text-sm"
           >
             {t.nav_shopper}
-          </button>
-          <button 
-            onClick={() => onNavigate(AppView.PartnerLogin)}
-            className="text-emerald-600 hover:text-emerald-700 font-medium px-2 py-2 transition-colors text-sm"
-          >
-            Partner Portal
           </button>
           <button 
             onClick={() => onNavigate(AppView.Login)}
