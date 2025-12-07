@@ -1039,7 +1039,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           AND ABS(r.amount - $2) <= $3
           AND r.date::date = $4::date
           AND r.status != 'rejected'
-          AND r.id != ''
         `, [supermarketName, totalAmount, amountTolerance, receiptDate]);
 
         if (similarAmountDup.rows.length > 0) {
