@@ -1795,6 +1795,182 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ==================== REPORTS API ====================
+    
+    // Reports Stats Summary
+    if (path === 'reports/stats/summary' && method === 'GET') {
+      const [users, receipts, campaigns, stores] = await Promise.all([
+        pool.query('SELECT COUNT(*) as count FROM users'),
+        pool.query('SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM receipts WHERE status = $1', ['verified']),
+        pool.query('SELECT COUNT(*) as count FROM campaigns WHERE status = $1', ['active']),
+        pool.query('SELECT COUNT(*) as count FROM supermarkets WHERE active = true')
+      ]);
+
+      return res.json({
+        totalUsers: parseInt(users.rows[0].count || '0'),
+        totalReceipts: parseInt(receipts.rows[0].count || '0'),
+        totalRevenue: parseFloat(receipts.rows[0].total || '0'),
+        activeCampaigns: parseInt(campaigns.rows[0].count || '0'),
+        activeStores: parseInt(stores.rows[0].count || '0')
+      });
+    }
+
+    // Reports Data with Filters
+    if (path.startsWith('reports/') && method === 'GET') {
+      const reportType = path.replace('reports/', '');
+      const { startDate, endDate, status, storeId, limit = '1000' } = req.query as any;
+
+      let query = '';
+      let params: any[] = [];
+      let paramIndex = 1;
+
+      switch (reportType) {
+        case 'transactions':
+          query = `
+            SELECT 
+              r.id as "transactionId",
+              to_char(r.date, 'YYYY-MM-DD') as "date",
+              r.amount,
+              r.status,
+              r.confidence_score as "confidence",
+              r.supermarket_name as "storeName",
+              u.id as "userId",
+              CONCAT(u.first_name, ' ', u.last_name) as "userName",
+              u.email as "userEmail",
+              u.phone_number as "userPhone"
+            FROM receipts r
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE 1=1
+          `;
+          if (startDate) { query += ` AND r.date >= $${paramIndex++}`; params.push(startDate); }
+          if (endDate) { query += ` AND r.date <= $${paramIndex++}`; params.push(endDate); }
+          if (status) { query += ` AND r.status = $${paramIndex++}`; params.push(status); }
+          query += ` ORDER BY r.date DESC LIMIT $${paramIndex++}`;
+          params.push(parseInt(limit));
+          break;
+
+        case 'users':
+          query = `
+            SELECT 
+              u.id as "userId",
+              u.first_name as "firstName",
+              u.last_name as "lastName",
+              u.email,
+              u.phone_number as "phoneNumber",
+              u.gender,
+              to_char(u.birthdate, 'YYYY-MM-DD') as "birthdate",
+              u.status,
+              u.points_balance as "pointsBalance",
+              u.points_expiring as "pointsExpiring",
+              to_char(u.points_expires_at, 'YYYY-MM-DD') as "nextExpiration",
+              u.total_spent as "totalSpent",
+              to_char(u.joined_date, 'YYYY-MM-DD') as "joinedDate",
+              CASE WHEN u.total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
+            FROM users u
+            WHERE 1=1
+          `;
+          if (status) { query += ` AND u.status = $${paramIndex++}`; params.push(status); }
+          if (startDate) { query += ` AND u.joined_date >= $${paramIndex++}`; params.push(startDate); }
+          if (endDate) { query += ` AND u.joined_date <= $${paramIndex++}`; params.push(endDate); }
+          query += ` ORDER BY u.joined_date DESC LIMIT $${paramIndex++}`;
+          params.push(parseInt(limit));
+          break;
+
+        case 'campaigns':
+          query = `
+            SELECT 
+              c.id as "campaignId",
+              c.name,
+              c.brand,
+              c.status,
+              to_char(c.start_date, 'YYYY-MM-DD') as "startDate",
+              to_char(c.end_date, 'YYYY-MM-DD') as "endDate",
+              c.conversions,
+              c.max_redemptions as "maxRedemptions",
+              c.target_audience as "targetAudience",
+              c.mechanic,
+              c.reward_type as "rewardType",
+              c.reward_value as "rewardValue",
+              (SELECT COUNT(*) FROM campaign_supermarkets cs WHERE cs.campaign_id = c.id) as "storeCount"
+            FROM campaigns c
+            WHERE 1=1
+          `;
+          if (status) { query += ` AND c.status = $${paramIndex++}`; params.push(status); }
+          if (startDate) { query += ` AND c.start_date >= $${paramIndex++}`; params.push(startDate); }
+          if (endDate) { query += ` AND c.end_date <= $${paramIndex++}`; params.push(endDate); }
+          query += ` ORDER BY c.id DESC LIMIT $${paramIndex++}`;
+          params.push(parseInt(limit));
+          break;
+
+        case 'stores':
+          query = `
+            SELECT 
+              s.id as "storeId",
+              s.name,
+              s.address,
+              CASE WHEN s.active THEN 'Active' ELSE 'Inactive' END as "status",
+              s.business_hours as "businessHours",
+              s.latitude,
+              s.longitude,
+              s.avg_basket as "avgBasket"
+            FROM supermarkets s
+            WHERE 1=1
+          `;
+          if (status === 'active') { query += ` AND s.active = true`; }
+          else if (status === 'inactive') { query += ` AND s.active = false`; }
+          query += ` ORDER BY s.name LIMIT $${paramIndex++}`;
+          params.push(parseInt(limit));
+          break;
+
+        case 'liability':
+          query = `
+            SELECT 
+              u.id as "userId",
+              CONCAT(u.first_name, ' ', u.last_name) as "userName",
+              u.status,
+              u.points_balance as "pointsBalance",
+              u.points_expiring as "pointsExpiring",
+              to_char(u.points_expires_at, 'YYYY-MM-DD') as "nextExpiration",
+              to_char(u.joined_date, 'YYYY-MM-DD') as "joinedDate",
+              CASE WHEN u.total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
+            FROM users u
+            WHERE u.points_balance > 0
+            ORDER BY u.points_balance DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'rewards':
+          query = `
+            SELECT 
+              rw.id as "rewardId",
+              rw.title,
+              rw.cost,
+              rw.type,
+              rw.brand,
+              0 as "totalRedemptions",
+              0 as "totalPointsSpent"
+            FROM rewards rw
+            ORDER BY rw.id DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        default:
+          return res.status(400).json({ error: 'Invalid report type' });
+      }
+
+      const result = await pool.query(query, params);
+      return res.json({ 
+        success: true, 
+        data: result.rows,
+        count: result.rowCount,
+        type: reportType
+      });
+    }
+
     // 404 for unmatched routes
     return res.status(404).json({ error: 'Not found', path, method });
 
