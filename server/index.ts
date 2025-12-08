@@ -1063,27 +1063,23 @@ app.get('/api/reports/:type', async (req, res) => {
         query = `
           SELECT 
             r.id as "transactionId",
-            to_char(r.submitted_at, 'YYYY-MM-DD HH24:MI') as "date",
-            r.total_amount as "amount",
+            to_char(r.date, 'YYYY-MM-DD') as "date",
+            r.amount,
             r.status,
             r.confidence_score as "confidence",
-            s.name as "storeName",
-            s.address as "storeAddress",
+            r.supermarket_name as "storeName",
             u.id as "userId",
             CONCAT(u.first_name, ' ', u.last_name) as "userName",
             u.email as "userEmail",
-            u.phone as "userPhone",
-            to_char(u.created_at, 'YYYY-MM-DD') as "userJoined"
+            u.phone_number as "userPhone"
           FROM receipts r
-          LEFT JOIN supermarkets s ON r.supermarket_id = s.id
           LEFT JOIN users u ON r.user_id = u.id
           WHERE 1=1
         `;
-        if (startDate) { query += ` AND r.submitted_at >= $${paramIndex++}`; params.push(startDate); }
-        if (endDate) { query += ` AND r.submitted_at <= $${paramIndex++}`; params.push(endDate + ' 23:59:59'); }
+        if (startDate) { query += ` AND r.date >= $${paramIndex++}`; params.push(startDate); }
+        if (endDate) { query += ` AND r.date <= $${paramIndex++}`; params.push(endDate); }
         if (status) { query += ` AND r.status = $${paramIndex++}`; params.push(status); }
-        if (storeId) { query += ` AND r.supermarket_id = $${paramIndex++}`; params.push(storeId); }
-        query += ` ORDER BY r.submitted_at DESC LIMIT $${paramIndex++}`;
+        query += ` ORDER BY r.date DESC LIMIT $${paramIndex++}`;
         params.push(parseInt(limit as string));
         break;
 
@@ -1094,23 +1090,23 @@ app.get('/api/reports/:type', async (req, res) => {
             u.first_name as "firstName",
             u.last_name as "lastName",
             u.email,
-            u.phone as "phoneNumber",
+            u.phone_number as "phoneNumber",
             u.gender,
             to_char(u.birthdate, 'YYYY-MM-DD') as "birthdate",
             u.status,
             u.points_balance as "pointsBalance",
             u.points_expiring as "pointsExpiring",
-            to_char(u.next_expiration, 'YYYY-MM-DD') as "nextExpiration",
+            to_char(u.points_expires_at, 'YYYY-MM-DD') as "nextExpiration",
             u.total_spent as "totalSpent",
-            to_char(u.created_at, 'YYYY-MM-DD') as "joinedDate",
-            u.segment
+            to_char(u.joined_date, 'YYYY-MM-DD') as "joinedDate",
+            CASE WHEN u.total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
           FROM users u
           WHERE 1=1
         `;
         if (status) { query += ` AND u.status = $${paramIndex++}`; params.push(status); }
-        if (startDate) { query += ` AND u.created_at >= $${paramIndex++}`; params.push(startDate); }
-        if (endDate) { query += ` AND u.created_at <= $${paramIndex++}`; params.push(endDate + ' 23:59:59'); }
-        query += ` ORDER BY u.created_at DESC LIMIT $${paramIndex++}`;
+        if (startDate) { query += ` AND u.joined_date >= $${paramIndex++}`; params.push(startDate); }
+        if (endDate) { query += ` AND u.joined_date <= $${paramIndex++}`; params.push(endDate); }
+        query += ` ORDER BY u.joined_date DESC LIMIT $${paramIndex++}`;
         params.push(parseInt(limit as string));
         break;
 
@@ -1129,7 +1125,7 @@ app.get('/api/reports/:type', async (req, res) => {
             c.mechanic,
             c.reward_type as "rewardType",
             c.reward_value as "rewardValue",
-            (SELECT COUNT(*) FROM campaign_supermarkets WHERE campaign_id = c.id) as "storeCount"
+            (SELECT COUNT(*) FROM campaign_supermarkets cs WHERE cs.campaign_id = c.id) as "storeCount"
           FROM campaigns c
           WHERE 1=1
         `;
@@ -1150,18 +1146,13 @@ app.get('/api/reports/:type', async (req, res) => {
             s.business_hours as "businessHours",
             s.latitude,
             s.longitude,
-            COUNT(r.id) as "totalReceipts",
-            COALESCE(SUM(CASE WHEN r.status = 'verified' THEN r.total_amount ELSE 0 END), 0) as "totalRevenue",
-            CASE WHEN COUNT(CASE WHEN r.status = 'verified' THEN 1 END) > 0 
-              THEN ROUND(SUM(CASE WHEN r.status = 'verified' THEN r.total_amount ELSE 0 END) / COUNT(CASE WHEN r.status = 'verified' THEN 1 END))
-              ELSE 0 END as "avgBasket"
+            s.avg_basket as "avgBasket"
           FROM supermarkets s
-          LEFT JOIN receipts r ON r.supermarket_id = s.id
           WHERE 1=1
         `;
         if (status === 'active') { query += ` AND s.active = true`; }
         else if (status === 'inactive') { query += ` AND s.active = false`; }
-        query += ` GROUP BY s.id ORDER BY s.name LIMIT $${paramIndex++}`;
+        query += ` ORDER BY s.name LIMIT $${paramIndex++}`;
         params.push(parseInt(limit as string));
         break;
 
@@ -1173,9 +1164,9 @@ app.get('/api/reports/:type', async (req, res) => {
             u.status,
             u.points_balance as "pointsBalance",
             u.points_expiring as "pointsExpiring",
-            to_char(u.next_expiration, 'YYYY-MM-DD') as "nextExpiration",
-            to_char(u.created_at, 'YYYY-MM-DD') as "joinedDate",
-            u.segment
+            to_char(u.points_expires_at, 'YYYY-MM-DD') as "nextExpiration",
+            to_char(u.joined_date, 'YYYY-MM-DD') as "joinedDate",
+            CASE WHEN u.total_spent > 100000 THEN 'VIP' ELSE 'Regular' END as segment
           FROM users u
           WHERE u.points_balance > 0
           ORDER BY u.points_balance DESC
@@ -1192,8 +1183,8 @@ app.get('/api/reports/:type', async (req, res) => {
             rw.cost,
             rw.type,
             rw.brand,
-            (SELECT COUNT(*) FROM redemptions rd WHERE rd.reward_id = rw.id) as "totalRedemptions",
-            (SELECT COALESCE(SUM(rd.points_spent), 0) FROM redemptions rd WHERE rd.reward_id = rw.id) as "totalPointsSpent"
+            0 as "totalRedemptions",
+            0 as "totalPointsSpent"
           FROM rewards rw
           ORDER BY rw.id DESC
           LIMIT $${paramIndex++}
@@ -1223,17 +1214,17 @@ app.get('/api/reports/stats/summary', async (req, res) => {
   try {
     const [users, receipts, campaigns, stores] = await Promise.all([
       pool.query('SELECT COUNT(*) as count FROM users'),
-      pool.query('SELECT COUNT(*) as count, SUM(total_amount) as total FROM receipts WHERE status = $1', ['verified']),
+      pool.query('SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM receipts WHERE status = $1', ['verified']),
       pool.query('SELECT COUNT(*) as count FROM campaigns WHERE status = $1', ['active']),
       pool.query('SELECT COUNT(*) as count FROM supermarkets WHERE active = true')
     ]);
 
     res.json({
-      totalUsers: parseInt(users.rows[0].count),
-      totalReceipts: parseInt(receipts.rows[0].count),
-      totalRevenue: parseFloat(receipts.rows[0].total || 0),
-      activeCampaigns: parseInt(campaigns.rows[0].count),
-      activeStores: parseInt(stores.rows[0].count)
+      totalUsers: parseInt(users.rows[0].count || '0'),
+      totalReceipts: parseInt(receipts.rows[0].count || '0'),
+      totalRevenue: parseFloat(receipts.rows[0].total || '0'),
+      activeCampaigns: parseInt(campaigns.rows[0].count || '0'),
+      activeStores: parseInt(stores.rows[0].count || '0')
     });
   } catch (err) {
     console.error(err);
