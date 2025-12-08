@@ -425,5 +425,24 @@ export const api = {
       if (!res.ok) throw new Error('Failed to generate AI analysis');
       return res.json();
     }
+  },
+  reports: {
+    getData: async (type: string, filters?: { startDate?: string; endDate?: string; status?: string; storeId?: string; limit?: number }): Promise<{ success: boolean; data: any[]; count: number; type: string }> => {
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.status) params.append('status', filters.status);
+      if (filters?.storeId) params.append('storeId', filters.storeId);
+      if (filters?.limit) params.append('limit', filters.limit.toString());
+      
+      const res = await fetch(`${API_PREFIX}/reports/${type}?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch report data');
+      return res.json();
+    },
+    getStats: async (): Promise<{ totalUsers: number; totalReceipts: number; totalRevenue: number; activeCampaigns: number; activeStores: number }> => {
+      const res = await fetch(`${API_PREFIX}/reports/stats/summary`);
+      if (!res.ok) throw new Error('Failed to fetch report stats');
+      return res.json();
+    }
   }
 };

@@ -1046,6 +1046,201 @@ app.get('/api/admins', async (req, res) => {
   }
 });
 
+// ==================== REPORTS API ====================
+
+// Get Report Data with Filters
+app.get('/api/reports/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { startDate, endDate, status, storeId, limit = 1000 } = req.query;
+
+    let query = '';
+    let params: any[] = [];
+    let paramIndex = 1;
+
+    switch (type) {
+      case 'transactions':
+        query = `
+          SELECT 
+            r.id as "transactionId",
+            to_char(r.submitted_at, 'YYYY-MM-DD HH24:MI') as "date",
+            r.total_amount as "amount",
+            r.status,
+            r.confidence_score as "confidence",
+            s.name as "storeName",
+            s.address as "storeAddress",
+            u.id as "userId",
+            CONCAT(u.first_name, ' ', u.last_name) as "userName",
+            u.email as "userEmail",
+            u.phone as "userPhone",
+            to_char(u.created_at, 'YYYY-MM-DD') as "userJoined"
+          FROM receipts r
+          LEFT JOIN supermarkets s ON r.supermarket_id = s.id
+          LEFT JOIN users u ON r.user_id = u.id
+          WHERE 1=1
+        `;
+        if (startDate) { query += ` AND r.submitted_at >= $${paramIndex++}`; params.push(startDate); }
+        if (endDate) { query += ` AND r.submitted_at <= $${paramIndex++}`; params.push(endDate + ' 23:59:59'); }
+        if (status) { query += ` AND r.status = $${paramIndex++}`; params.push(status); }
+        if (storeId) { query += ` AND r.supermarket_id = $${paramIndex++}`; params.push(storeId); }
+        query += ` ORDER BY r.submitted_at DESC LIMIT $${paramIndex++}`;
+        params.push(parseInt(limit as string));
+        break;
+
+      case 'users':
+        query = `
+          SELECT 
+            u.id as "userId",
+            u.first_name as "firstName",
+            u.last_name as "lastName",
+            u.email,
+            u.phone as "phoneNumber",
+            u.gender,
+            to_char(u.birthdate, 'YYYY-MM-DD') as "birthdate",
+            u.status,
+            u.points_balance as "pointsBalance",
+            u.points_expiring as "pointsExpiring",
+            to_char(u.next_expiration, 'YYYY-MM-DD') as "nextExpiration",
+            u.total_spent as "totalSpent",
+            to_char(u.created_at, 'YYYY-MM-DD') as "joinedDate",
+            u.segment
+          FROM users u
+          WHERE 1=1
+        `;
+        if (status) { query += ` AND u.status = $${paramIndex++}`; params.push(status); }
+        if (startDate) { query += ` AND u.created_at >= $${paramIndex++}`; params.push(startDate); }
+        if (endDate) { query += ` AND u.created_at <= $${paramIndex++}`; params.push(endDate + ' 23:59:59'); }
+        query += ` ORDER BY u.created_at DESC LIMIT $${paramIndex++}`;
+        params.push(parseInt(limit as string));
+        break;
+
+      case 'campaigns':
+        query = `
+          SELECT 
+            c.id as "campaignId",
+            c.name,
+            c.brand,
+            c.status,
+            to_char(c.start_date, 'YYYY-MM-DD') as "startDate",
+            to_char(c.end_date, 'YYYY-MM-DD') as "endDate",
+            c.conversions,
+            c.max_redemptions as "maxRedemptions",
+            c.target_audience as "targetAudience",
+            c.mechanic,
+            c.reward_type as "rewardType",
+            c.reward_value as "rewardValue",
+            (SELECT COUNT(*) FROM campaign_supermarkets WHERE campaign_id = c.id) as "storeCount"
+          FROM campaigns c
+          WHERE 1=1
+        `;
+        if (status) { query += ` AND c.status = $${paramIndex++}`; params.push(status); }
+        if (startDate) { query += ` AND c.start_date >= $${paramIndex++}`; params.push(startDate); }
+        if (endDate) { query += ` AND c.end_date <= $${paramIndex++}`; params.push(endDate); }
+        query += ` ORDER BY c.id DESC LIMIT $${paramIndex++}`;
+        params.push(parseInt(limit as string));
+        break;
+
+      case 'stores':
+        query = `
+          SELECT 
+            s.id as "storeId",
+            s.name,
+            s.address,
+            CASE WHEN s.active THEN 'Active' ELSE 'Inactive' END as "status",
+            s.business_hours as "businessHours",
+            s.latitude,
+            s.longitude,
+            COUNT(r.id) as "totalReceipts",
+            COALESCE(SUM(CASE WHEN r.status = 'verified' THEN r.total_amount ELSE 0 END), 0) as "totalRevenue",
+            CASE WHEN COUNT(CASE WHEN r.status = 'verified' THEN 1 END) > 0 
+              THEN ROUND(SUM(CASE WHEN r.status = 'verified' THEN r.total_amount ELSE 0 END) / COUNT(CASE WHEN r.status = 'verified' THEN 1 END))
+              ELSE 0 END as "avgBasket"
+          FROM supermarkets s
+          LEFT JOIN receipts r ON r.supermarket_id = s.id
+          WHERE 1=1
+        `;
+        if (status === 'active') { query += ` AND s.active = true`; }
+        else if (status === 'inactive') { query += ` AND s.active = false`; }
+        query += ` GROUP BY s.id ORDER BY s.name LIMIT $${paramIndex++}`;
+        params.push(parseInt(limit as string));
+        break;
+
+      case 'liability':
+        query = `
+          SELECT 
+            u.id as "userId",
+            CONCAT(u.first_name, ' ', u.last_name) as "userName",
+            u.status,
+            u.points_balance as "pointsBalance",
+            u.points_expiring as "pointsExpiring",
+            to_char(u.next_expiration, 'YYYY-MM-DD') as "nextExpiration",
+            to_char(u.created_at, 'YYYY-MM-DD') as "joinedDate",
+            u.segment
+          FROM users u
+          WHERE u.points_balance > 0
+          ORDER BY u.points_balance DESC
+          LIMIT $${paramIndex++}
+        `;
+        params.push(parseInt(limit as string));
+        break;
+
+      case 'rewards':
+        query = `
+          SELECT 
+            rw.id as "rewardId",
+            rw.title,
+            rw.cost,
+            rw.type,
+            rw.brand,
+            (SELECT COUNT(*) FROM redemptions rd WHERE rd.reward_id = rw.id) as "totalRedemptions",
+            (SELECT COALESCE(SUM(rd.points_spent), 0) FROM redemptions rd WHERE rd.reward_id = rw.id) as "totalPointsSpent"
+          FROM rewards rw
+          ORDER BY rw.id DESC
+          LIMIT $${paramIndex++}
+        `;
+        params.push(parseInt(limit as string));
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    const result = await pool.query(query, params);
+    res.json({ 
+      success: true, 
+      data: result.rows,
+      count: result.rowCount,
+      type
+    });
+  } catch (err) {
+    console.error('Report Error:', err);
+    res.status(500).json({ error: 'Failed to generate report' });
+  }
+});
+
+// Get Dashboard Stats for Reports
+app.get('/api/reports/stats/summary', async (req, res) => {
+  try {
+    const [users, receipts, campaigns, stores] = await Promise.all([
+      pool.query('SELECT COUNT(*) as count FROM users'),
+      pool.query('SELECT COUNT(*) as count, SUM(total_amount) as total FROM receipts WHERE status = $1', ['verified']),
+      pool.query('SELECT COUNT(*) as count FROM campaigns WHERE status = $1', ['active']),
+      pool.query('SELECT COUNT(*) as count FROM supermarkets WHERE active = true')
+    ]);
+
+    res.json({
+      totalUsers: parseInt(users.rows[0].count),
+      totalReceipts: parseInt(receipts.rows[0].count),
+      totalRevenue: parseFloat(receipts.rows[0].total || 0),
+      activeCampaigns: parseInt(campaigns.rows[0].count),
+      activeStores: parseInt(stores.rows[0].count)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
