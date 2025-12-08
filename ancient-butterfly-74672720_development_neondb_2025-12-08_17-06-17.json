@@ -1,0 +1,820 @@
+[{
+  "table_name": "activities",
+  "column_name": "id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "nextval('activities_id_seq'::regclass)",
+  "is_nullable": "NO"
+}, {
+  "table_name": "activities",
+  "column_name": "user_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "activities",
+  "column_name": "type",
+  "data_type": "character varying",
+  "character_maximum_length": 50,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "activities",
+  "column_name": "description",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "activities",
+  "column_name": "points",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "activities",
+  "column_name": "date",
+  "data_type": "timestamp without time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "admins",
+  "column_name": "id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "nextval('admins_id_seq'::regclass)",
+  "is_nullable": "NO"
+}, {
+  "table_name": "admins",
+  "column_name": "email",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "admins",
+  "column_name": "password",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "admins",
+  "column_name": "name",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaign_supermarkets",
+  "column_name": "campaign_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaign_supermarkets",
+  "column_name": "supermarket_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "brand",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "status",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "start_date",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "end_date",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "mechanic",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "min_spend",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "max_redemptions",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "conversions",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "0",
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "target_audience",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": "'all'::text",
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "reward_type",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "reward_value",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "campaigns",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "updated_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "campaigns",
+  "column_name": "image_url",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "id",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": "'main'::text",
+  "is_nullable": "NO"
+}, {
+  "table_name": "content",
+  "column_name": "landing_config",
+  "data_type": "jsonb",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "help_config",
+  "data_type": "jsonb",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "privacy_content",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "terms_content",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "content",
+  "column_name": "updated_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "email_verifications",
+  "column_name": "email",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "email_verifications",
+  "column_name": "code",
+  "data_type": "character varying",
+  "character_maximum_length": 6,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "email_verifications",
+  "column_name": "expires_at",
+  "data_type": "timestamp without time zone",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "user_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "title",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "message",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "date",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "read",
+  "data_type": "boolean",
+  "character_maximum_length": null,
+  "column_default": "false",
+  "is_nullable": "YES"
+}, {
+  "table_name": "notifications",
+  "column_name": "type",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "notifications",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "partner_supermarkets",
+  "column_name": "partner_id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partner_supermarkets",
+  "column_name": "supermarket_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "nextval('partners_id_seq'::regclass)",
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "email",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "password",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "name",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "company_name",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "partners",
+  "column_name": "phone",
+  "data_type": "character varying",
+  "character_maximum_length": 50,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "partners",
+  "column_name": "status",
+  "data_type": "character varying",
+  "character_maximum_length": 50,
+  "column_default": "'pending'::character varying",
+  "is_nullable": "YES"
+}, {
+  "table_name": "partners",
+  "column_name": "created_at",
+  "data_type": "timestamp without time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "nextval('purchases_id_seq'::regclass)",
+  "is_nullable": "NO"
+}, {
+  "table_name": "purchases",
+  "column_name": "user_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "reward_id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "item_name",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "cost",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "status",
+  "data_type": "character varying",
+  "character_maximum_length": 50,
+  "column_default": "'completed'::character varying",
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "date",
+  "data_type": "timestamp without time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "purchases",
+  "column_name": "fulfillment_details",
+  "data_type": "jsonb",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "receipt_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "quantity",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "unit_price",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "total",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipt_items",
+  "column_name": "category",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "receipts",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "user_id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "supermarket_name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "amount",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "date",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "status",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": "'pending'::text",
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "confidence_score",
+  "data_type": "double precision",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "image_url",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "receipts",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "receipts",
+  "column_name": "updated_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "receipts",
+  "column_name": "receipt_number",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "receipts",
+  "column_name": "image_hash",
+  "data_type": "character varying",
+  "character_maximum_length": 64,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "rewards",
+  "column_name": "id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "nextval('rewards_id_seq'::regclass)",
+  "is_nullable": "NO"
+}, {
+  "table_name": "rewards",
+  "column_name": "title",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "rewards",
+  "column_name": "cost",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "rewards",
+  "column_name": "type",
+  "data_type": "character varying",
+  "character_maximum_length": 50,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "rewards",
+  "column_name": "brand",
+  "data_type": "character varying",
+  "character_maximum_length": 100,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "rewards",
+  "column_name": "image_url",
+  "data_type": "character varying",
+  "character_maximum_length": 255,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "rewards",
+  "column_name": "partner_id",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "address",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "active",
+  "data_type": "boolean",
+  "character_maximum_length": null,
+  "column_default": "true",
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "logo_url",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "business_hours",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "latitude",
+  "data_type": "double precision",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "longitude",
+  "data_type": "double precision",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "avg_basket",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "supermarkets",
+  "column_name": "updated_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "id",
+  "data_type": "uuid",
+  "character_maximum_length": null,
+  "column_default": "gen_random_uuid()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "first_name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "last_name",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "email",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "phone_number",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "pin",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "status",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": "'active'::text",
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "points_balance",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "0",
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "points_expiring",
+  "data_type": "integer",
+  "character_maximum_length": null,
+  "column_default": "0",
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "points_expires_at",
+  "data_type": "date",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "total_spent",
+  "data_type": "numeric",
+  "character_maximum_length": null,
+  "column_default": "0",
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "joined_date",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "NO"
+}, {
+  "table_name": "users",
+  "column_name": "gender",
+  "data_type": "text",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "birthdate",
+  "data_type": "date",
+  "character_maximum_length": null,
+  "column_default": null,
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "created_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}, {
+  "table_name": "users",
+  "column_name": "updated_at",
+  "data_type": "timestamp with time zone",
+  "character_maximum_length": null,
+  "column_default": "now()",
+  "is_nullable": "YES"
+}]

@@ -443,6 +443,18 @@ export const api = {
       const res = await fetch(`${API_PREFIX}/reports/stats/summary`);
       if (!res.ok) throw new Error('Failed to fetch report stats');
       return res.json();
+    },
+    aiQuery: async (prompt: string): Promise<{ success: boolean; data: any[]; sql: string; count: number }> => {
+      const res = await fetch(`${API_PREFIX}/reports/ai-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to process AI query');
+      }
+      return res.json();
     }
   }
 };

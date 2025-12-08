@@ -1797,6 +1797,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ==================== REPORTS API ====================
     
+    // AI Report Query
+    if (path === '/reports/ai-query' && method === 'POST') {
+      const { prompt } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      
+      if (!apiKey) {
+        return res.status(500).json({ error: 'AI Service not configured' });
+      }
+
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const model = 'gemini-2.0-flash'; 
+
+        const schemaContext = `
+          Table: users (columns: id, first_name, last_name, email, phone_number, points_balance, total_spent, joined_date, gender, birthdate, status)
+          Table: receipts (columns: id, user_id, supermarket_name, amount, date, status, confidence_score)
+          Table: receipt_items (columns: name, quantity, unit_price, total, category)
+          Table: campaigns (columns: name, brand, status, start_date, end_date, conversions, max_redemptions)
+          Table: purchases (columns: item_name, cost, date, status, user_id) - represents Reward Redemptions
+          Table: supermarkets (columns: name, address, active, avg_basket)
+        `;
+
+        const systemPrompt = `
+          You are a PostgreSQL expert for a Loyalty Program database.
+          Generate a valid SQL SELECT statement to answer the user's question.
+          
+          Database Schema:
+          ${schemaContext}
+
+          Rules:
+          1. Return ONLY the raw SQL query. No markdown formatting, no explanations.
+          2. Use standard PostgreSQL syntax.
+          3. Only use SELECT statements. Never use UPDATE, DELETE, INSERT, DROP, ALTER.
+          4. Limit results to 100 rows unless specified otherwise.
+          5. Use descriptive aliases for columns (e.g., "Total Revenue" instead of sum).
+          6. If the question cannot be answered with the schema, return "SELECT 'Cannot answer question with available data' as error".
+          
+          User Question: "${prompt}"
+        `;
+
+        const response = await ai.models.generateContent({
+          model,
+          contents: systemPrompt,
+        });
+
+        let sqlQuery = response.text.trim();
+        // Remove markdown code blocks if present
+        sqlQuery = sqlQuery.replace(/```sql/g, '').replace(/```/g, '').trim();
+
+        // Security Validation
+        const forbiddenKeywords = ['UPDATE', 'DELETE', 'INSERT', 'DROP', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE', ';'];
+        if (forbiddenKeywords.some(keyword => sqlQuery.toUpperCase().includes(keyword))) {
+          return res.status(400).json({ error: 'Generated query violates security policies' });
+        }
+        if (!sqlQuery.toUpperCase().startsWith('SELECT')) {
+          return res.status(400).json({ error: 'Invalid query type generated' });
+        }
+
+        console.log(`[AI Query] Prompt: ${prompt} | SQL: ${sqlQuery}`);
+        const result = await pool.query(sqlQuery);
+        
+        return res.json({
+          success: true,
+          data: result.rows,
+          sql: sqlQuery,
+          count: result.rowCount
+        });
+
+      } catch (err: any) {
+        console.error('AI Query Error:', err);
+        return res.status(500).json({ error: 'Failed to process AI query', details: err.message });
+      }
+    }
+
     // Reports Stats Summary
     if (path === '/reports/stats/summary' && method === 'GET') {
       const [users, receipts, campaigns, stores] = await Promise.all([
@@ -1953,6 +2027,138 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               0 as "totalPointsSpent"
             FROM rewards rw
             ORDER BY rw.id DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'products':
+          query = `
+            SELECT 
+              name as "productName",
+              category,
+              SUM(quantity) as "unitsSold",
+              SUM(total) as "totalRevenue",
+              AVG(unit_price) as "avgPrice"
+            FROM receipt_items
+            GROUP BY name, category
+            ORDER BY "totalRevenue" DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'redemptions':
+          query = `
+            SELECT 
+              p.item_name as "rewardName",
+              p.cost as "pointsCost",
+              p.status,
+              to_char(p.date, 'YYYY-MM-DD HH24:MI') as "redemptionDate",
+              CONCAT(u.first_name, ' ', u.last_name) as "userName",
+              u.email as "userEmail"
+            FROM purchases p
+            LEFT JOIN users u ON p.user_id = u.id
+            WHERE 1=1
+          `;
+          if (startDate) { query += ` AND p.date >= $${paramIndex++}`; params.push(startDate); }
+          if (endDate) { query += ` AND p.date <= $${paramIndex++}`; params.push(endDate); }
+          query += ` ORDER BY p.date DESC LIMIT $${paramIndex++}`;
+          params.push(parseInt(limit));
+          break;
+
+        case 'sales_heatmap':
+          query = `
+            SELECT 
+              to_char(date, 'Day') as "dayOfWeek",
+              EXTRACT(HOUR FROM date) as "hourOfDay",
+              COUNT(*) as "transactionCount",
+              SUM(amount) as "totalRevenue",
+              AVG(amount) as "avgTicket"
+            FROM receipts
+            WHERE status = 'verified'
+          `;
+          if (startDate) { query += ` AND date >= $${paramIndex++}`; params.push(startDate); }
+          if (endDate) { query += ` AND date <= $${paramIndex++}`; params.push(endDate); }
+          query += ` 
+            GROUP BY "dayOfWeek", "hourOfDay" 
+            ORDER BY "totalRevenue" DESC 
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        // ============ PREMIUM REPORTS ============
+        case 'premium_clv':
+          query = `
+            SELECT 
+              u.id as "userId",
+              CONCAT(u.first_name, ' ', u.last_name) as "userName",
+              u.email,
+              u.total_spent as "totalLifetimeSpend",
+              u.points_balance as "currentPoints",
+              to_char(u.joined_date, 'YYYY-MM-DD') as "joinedDate",
+              ROUND((u.total_spent / GREATEST(EXTRACT(DAY FROM (NOW() - u.joined_date)), 1)) * 365, 2) as "projectedAnnualValue",
+              CASE 
+                WHEN u.total_spent > 1000 THEN 'High Value'
+                WHEN u.total_spent > 500 THEN 'Medium Value'
+                ELSE 'Low Value'
+              END as "customerTier"
+            FROM users u
+            WHERE u.total_spent > 0
+            ORDER BY u.total_spent DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'premium_growth':
+          query = `
+            SELECT 
+              to_char(joined_date, 'YYYY-MM') as "month",
+              COUNT(*) as "newUsers",
+              SUM(COUNT(*)) OVER (ORDER BY to_char(joined_date, 'YYYY-MM')) as "totalUserBase",
+              SUM(total_spent) as "cohortSpend"
+            FROM users
+            GROUP BY "month"
+            ORDER BY "month" DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'premium_affinity':
+          query = `
+            SELECT 
+              ri.category,
+              COUNT(DISTINCT r.user_id) as "uniqueBuyers",
+              SUM(ri.quantity) as "unitsSold",
+              SUM(ri.total) as "revenue",
+              ROUND(AVG(ri.unit_price), 2) as "avgPrice"
+            FROM receipt_items ri
+            JOIN receipts r ON ri.receipt_id = r.id
+            GROUP BY ri.category
+            ORDER BY "revenue" DESC
+            LIMIT $${paramIndex++}
+          `;
+          params.push(parseInt(limit));
+          break;
+
+        case 'premium_churn':
+          query = `
+            SELECT 
+              u.id as "userId",
+              CONCAT(u.first_name, ' ', u.last_name) as "userName",
+              u.email,
+              u.phone_number as "phone",
+              u.total_spent as "lifetimeSpend",
+              to_char(MAX(r.date), 'YYYY-MM-DD') as "lastPurchaseDate",
+              EXTRACT(DAY FROM (NOW() - MAX(r.date))) as "daysSinceLastActive"
+            FROM users u
+            LEFT JOIN receipts r ON u.id = r.user_id
+            GROUP BY u.id
+            HAVING MAX(r.date) < NOW() - INTERVAL '30 days' OR MAX(r.date) IS NULL
+            ORDER BY u.total_spent DESC NULLS LAST
             LIMIT $${paramIndex++}
           `;
           params.push(parseInt(limit));
