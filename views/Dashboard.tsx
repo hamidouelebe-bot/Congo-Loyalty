@@ -58,7 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({ lang }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-800 mb-4">{t.recent_activity}</h3>
-          <div className="h-64 w-full">
+          <div className="h-64 w-full min-h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={charts?.salesData || []}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -73,7 +73,7 @@ const Dashboard: React.FC<DashboardProps> = ({ lang }) => {
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-800 mb-4">{t.top_brands}</h3>
-           <div className="h-64 w-full">
+           <div className="h-64 w-full min-h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={charts?.brandData || []}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />

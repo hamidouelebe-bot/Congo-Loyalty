@@ -1798,7 +1798,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==================== REPORTS API ====================
     
     // Reports Stats Summary
-    if (path === 'reports/stats/summary' && method === 'GET') {
+    if (path === '/reports/stats/summary' && method === 'GET') {
       const [users, receipts, campaigns, stores] = await Promise.all([
         pool.query('SELECT COUNT(*) as count FROM users'),
         pool.query('SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM receipts WHERE status = $1', ['verified']),
@@ -1816,8 +1816,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Reports Data with Filters
-    if (path.startsWith('reports/') && method === 'GET') {
-      const reportType = path.replace('reports/', '');
+    if (path.startsWith('/reports/') && method === 'GET') {
+      const reportType = path.replace('/reports/', '');
       const { startDate, endDate, status, storeId, limit = '1000' } = req.query as any;
 
       let query = '';
